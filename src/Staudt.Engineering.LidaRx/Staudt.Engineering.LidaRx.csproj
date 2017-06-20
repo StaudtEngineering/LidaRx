@@ -1,0 +1,26 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFrameworks>netstandard1.4;net45;net46</TargetFrameworks>
+    <Authors>Yannic Staudt</Authors>
+    <Company>Staudt Engineering</Company>
+    <Description>A lightweight but powerful Lidar scanner processing library for .NET providing 
+support for multiple Lidar scanners.</Description>
+    <GeneratePackageOnBuild>True</GeneratePackageOnBuild>
+    <PackageRequireLicenseAcceptance>True</PackageRequireLicenseAcceptance>
+    <PackageLicenseUrl>https://www.gnu.org/copyleft/lesser.html</PackageLicenseUrl>
+    <Copyright>Copyright (c) 2017 Yannic Staudt</Copyright>
+    <Version>17.6.1</Version>
+    <FileVersion>17.6.1</FileVersion>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="System.Reactive" Version="3.1.1" />
+  </ItemGroup>
+
+  <ItemGroup Condition="'$(TargetFramework)'=='net45' OR '$(TargetFramework)'=='net46'">
+    <Reference Include="System" />
+    <Reference Include="System.Core" />
+    <Reference Include="Microsoft.CSharp" />
+  </ItemGroup>
+</Project>

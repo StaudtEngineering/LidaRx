@@ -25,7 +25,7 @@ using System.Numerics;
 
 namespace Staudt.Engineering.LidaRx
 {
-    public interface ILidarScanner : IObservable<ILidarEvent>
+    public interface ILidarScanner : IObservable<ILidarEvent>, IDisposable
     {
         /// <summary>
         /// The scanner's position in 3d space
@@ -36,6 +36,22 @@ namespace Staudt.Engineering.LidaRx
         /// The scanner's orientation in 3d space
         /// </summary>
         Quaternion Orientation { get; set; }
+
+        /// <summary>
+        /// Indicates whether this scanner is connected
+        /// </summary>
+        bool Connected { get; }
+
+        /// <summary>
+        /// Conntect to the scanner
+        /// </summary>
+        void Connect();
+
+        /// <summary>
+        /// Connect to the scanner
+        /// </summary>
+        /// <returns></returns>
+        Task ConnectAsync();
 
         /// <summary>
         /// Start scanning

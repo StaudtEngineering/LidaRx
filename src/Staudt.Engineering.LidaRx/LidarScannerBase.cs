@@ -57,10 +57,13 @@ namespace Staudt.Engineering.LidaRx
         {
         }        
 
+        public abstract bool Connected { get; }
         public abstract void StartScan();
         public abstract Task StartScanAsync();
         public abstract void StopScan();
         public abstract Task StopScanAsync();
+        public abstract void Connect();
+        public abstract Task ConnectAsync();
 
         #region Helpers
 
@@ -125,6 +128,36 @@ namespace Staudt.Engineering.LidaRx
                     _observers.Remove(_observer);
             }
         }
+
+        #region IDisposable Support
+        private bool disposedValue = false; // Dient zur Erkennung redundanter Aufrufe.
+
+        protected virtual void Dispose(bool disposing)
+        {
+            if (!disposedValue)
+            {
+                if (disposing)
+                {
+                    // disposal of managed ressources
+                    foreach (var observer in observers.ToArray())
+                        if (observers.Contains(observer))
+                            observer.OnCompleted();
+
+                    observers.Clear();
+                }
+
+                // TODO: disposal of non-nanaged ressources here
+                // TODO: set fields null if required
+
+                disposedValue = true;
+            }
+        }
+
+        public void Dispose()
+        { 
+            Dispose(true);
+        }
+        #endregion
 
 
         #endregion

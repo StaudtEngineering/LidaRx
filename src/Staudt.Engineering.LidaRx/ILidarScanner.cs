@@ -43,6 +43,11 @@ namespace Staudt.Engineering.LidaRx
         bool Connected { get; }
 
         /// <summary>
+        /// True when currently scanning
+        /// </summary>
+        bool IsScanning { get; }
+
+        /// <summary>
         /// Conntect to the scanner
         /// </summary>
         void Connect();
@@ -52,6 +57,17 @@ namespace Staudt.Engineering.LidaRx
         /// </summary>
         /// <returns></returns>
         Task ConnectAsync();
+
+        /// <summary>
+        /// Disconnect from the scanner
+        /// </summary>
+        void Disconnect();
+
+        /// <summary>
+        /// Disconnect from the scanner
+        /// </summary>
+        /// <returns></returns>
+        Task DisconnectAsync();
 
         /// <summary>
         /// Start scanning

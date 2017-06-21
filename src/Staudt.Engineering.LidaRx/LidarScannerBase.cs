@@ -58,12 +58,15 @@ namespace Staudt.Engineering.LidaRx
         }        
 
         public abstract bool Connected { get; }
+        public abstract bool IsScanning { get; }
         public abstract void StartScan();
         public abstract Task StartScanAsync();
         public abstract void StopScan();
         public abstract Task StopScanAsync();
         public abstract void Connect();
         public abstract Task ConnectAsync();
+        public abstract void Disconnect();
+        public abstract Task DisconnectAsync();
 
         #region Helpers
 
@@ -130,8 +133,7 @@ namespace Staudt.Engineering.LidaRx
         }
 
         #region IDisposable Support
-        private bool disposedValue = false; // Dient zur Erkennung redundanter Aufrufe.
-
+        private bool disposedValue = false;
         protected virtual void Dispose(bool disposing)
         {
             if (!disposedValue)

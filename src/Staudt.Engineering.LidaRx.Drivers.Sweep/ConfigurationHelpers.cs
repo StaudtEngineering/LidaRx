@@ -26,17 +26,17 @@ namespace Staudt.Engineering.LidaRx.Drivers.Sweep
     /// </summary>
     public enum SweepMotorSpeed
     {
-        Speed0Hz,
-        Speed1Hz,
-        Speed2Hz,
-        Speed3Hz,
-        Speed4Hz,
-        Speed5Hz,
-        Speed6Hz,
-        Speed7Hz,
-        Speed8Hz,
-        Speed9Hz,
-        Speed10Hz,
+        Speed0Hz = 0,
+        Speed1Hz = 1,
+        Speed2Hz = 2,
+        Speed3Hz = 3,
+        Speed4Hz = 4,
+        Speed5Hz = 5,
+        Speed6Hz = 6,
+        Speed7Hz = 7,
+        Speed8Hz = 8,
+        Speed9Hz = 9,
+        Speed10Hz = 10,
         SpeedUnknown
     }
 
@@ -45,9 +45,9 @@ namespace Staudt.Engineering.LidaRx.Drivers.Sweep
     /// </summary>
     public enum SweepSampleRate
     {
-        SampleRate500,
-        SampleRate750,
-        SampleRate1000,
+        SampleRate500 = 1,
+        SampleRate750 = 2,
+        SampleRate1000 = 3,
         SampleRateUnknown
     }
 }

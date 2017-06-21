@@ -7,6 +7,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Staudt.Engineering.LidaRx",
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Staudt.Engineering.LidaRx.Drivers.Sweep", "Staudt.Engineering.LidaRx.Drivers.Sweep\Staudt.Engineering.LidaRx.Drivers.Sweep.csproj", "{AF6C7E7E-A7AC-4562-962F-98ECD58B831E}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Staudt.Engineering.LidaRx.SandboxApp", "Staudt.Engineering.LidaRx.SandboxApp\Staudt.Engineering.LidaRx.SandboxApp.csproj", "{45953FCB-063D-458B-B19B-22C5B92683B9}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -21,6 +23,10 @@ Global
 		{AF6C7E7E-A7AC-4562-962F-98ECD58B831E}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{AF6C7E7E-A7AC-4562-962F-98ECD58B831E}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{AF6C7E7E-A7AC-4562-962F-98ECD58B831E}.Release|Any CPU.Build.0 = Release|Any CPU
+		{45953FCB-063D-458B-B19B-22C5B92683B9}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{45953FCB-063D-458B-B19B-22C5B92683B9}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{45953FCB-063D-458B-B19B-22C5B92683B9}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{45953FCB-063D-458B-B19B-22C5B92683B9}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

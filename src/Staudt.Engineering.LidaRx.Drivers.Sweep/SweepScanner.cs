@@ -20,6 +20,7 @@
 #endregion
 
 using RJCP.IO.Ports;
+using Staudt.Engineering.LidaRx.Drivers.Sweep.Protocol;
 using System;
 using System.Threading.Tasks;
 
@@ -27,12 +28,21 @@ namespace Staudt.Engineering.LidaRx.Drivers.Sweep
 {
     public class SweepScanner : LidarScannerBase
     {
+        /// <summary>
+        /// The serial port used to communicate with Sweep
+        /// </summary>
         SerialPortStream serialPort;
 
         /// <summary>
         /// True when connected with a Sweep
         /// </summary>
         public override bool Connected => serialPort?.IsOpen ?? false;
+
+        /// <summary>
+        /// True when currently scanning
+        /// </summary>
+        public override bool IsScanning => _isScanning;
+        bool _isScanning = false;
 
         /// <summary>
         /// The status / info for the connected sweep
@@ -46,12 +56,42 @@ namespace Staudt.Engineering.LidaRx.Drivers.Sweep
         public SweepScanner(string portName)
         {
             serialPort = new SerialPortStream(portName, 115200, 8, Parity.None, StopBits.One);
+            serialPort.ErrorReceived += SerialPort_ErrorReceived;
+
+            serialPort.ReadTimeout = 100;
+            serialPort.WriteTimeout = 100;
+        }
+
+        private void SerialPort_ErrorReceived(object sender, SerialErrorReceivedEventArgs e)
+        {
+            // TODO?
         }
 
         public override void Connect()
         {
+            // already connected
+            if (Connected)
+                return;
+
             serialPort.Open();
 
+            var mrCommand = new Protocol.MotorReadyCommand();
+            SimpleCommandTxRx(mrCommand);
+
+            //rialPort.Read()
+
+        }
+
+        void SimpleCommandTxRx(ISweepCommand cmd)
+        {
+            var buffer = new char[cmd.ExpectedAnswerLength];
+
+            // TX then RX
+            serialPort.Write(cmd.Command, 0, cmd.Command.Length);            
+            serialPort.Read(buffer, 0, cmd.ExpectedAnswerLength);
+
+            // process the response
+            cmd.ProcessResponse(buffer);
         }
 
         public override Task ConnectAsync()
@@ -59,6 +99,16 @@ namespace Staudt.Engineering.LidaRx.Drivers.Sweep
             throw new NotImplementedException();
         }
 
+
+        public override void Disconnect()
+        {
+            throw new NotImplementedException();
+        }
+
+        public override Task DisconnectAsync()
+        {
+            throw new NotImplementedException();
+        }
 
         public override void StartScan()
         {
@@ -79,5 +129,34 @@ namespace Staudt.Engineering.LidaRx.Drivers.Sweep
         {
             throw new NotImplementedException();
         }
+
+        #region Async serial RX
+
+        #endregion
+
+        #region Asyns serial TX
+
+        #endregion
+
+        #region IDisposable Support
+        private bool disposedValue = false;
+        protected override void Dispose(bool disposing)
+        {
+            if (!disposedValue)
+            {
+                if (disposing)
+                {
+                    serialPort.Dispose();
+                }
+
+                // TODO: disposal of non-nanaged ressources here
+                // TODO: set fields null if required
+
+                disposedValue = true;
+            }
+
+            base.Dispose(disposing);
+        }
+        #endregion
     }
 }

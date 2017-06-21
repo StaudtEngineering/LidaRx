@@ -27,5 +27,17 @@ namespace Staudt.Engineering.LidaRx.Drivers.Sweep.Protocol
 
             return value;
         }
+
+        public static bool StatusChecksumValid(char[] input)
+        {
+            // take the 3 relevant bytes
+            var copy = input.Skip(input.Length - 4).Take(3).ToArray();
+
+            // checksum formula as per sweep user manual
+            var chechsumCalculated = ((copy[0] + copy[1]) & 0x3f) + 0x30;
+            var checksumByteValue = copy[2];
+
+            return (checksumByteValue == chechsumCalculated);
+        }
     }
 }

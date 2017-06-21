@@ -90,6 +90,8 @@ namespace Staudt.Engineering.LidaRx.Drivers.Sweep
             var ivCommand = new VersionInformationCommand();
             SimpleCommandTxRx(ivCommand);
 
+            var msCommand = new AdjustMotorSpeedCommand(SweepMotorSpeed.Speed5Hz);
+            SimpleCommandTxRx(msCommand);
             //rialPort.Read()
 
         }

@@ -15,4 +15,3 @@ namespace Staudt.Engineering.LidaRx.Drivers.Sweep.Protocol
         }
     }
 }
-}

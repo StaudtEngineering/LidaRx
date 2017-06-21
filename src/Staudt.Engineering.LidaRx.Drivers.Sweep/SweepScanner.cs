@@ -22,6 +22,8 @@
 using RJCP.IO.Ports;
 using Staudt.Engineering.LidaRx.Drivers.Sweep.Protocol;
 using System;
+using System.Linq;
+using System.Threading;
 using System.Threading.Tasks;
 
 namespace Staudt.Engineering.LidaRx.Drivers.Sweep
@@ -50,6 +52,11 @@ namespace Staudt.Engineering.LidaRx.Drivers.Sweep
         public SweepInfo Info { get; } = new SweepInfo();
 
         /// <summary>
+        /// Semaphore for the connection process
+        /// </summary>
+        static SemaphoreSlim _semaphoreSlimConnect = new SemaphoreSlim(1, 1);
+
+        /// <summary>
         /// Creates a new driver for a Scanse.io Sweep LIDAR scanner
         /// </summary>
         /// <param name="serialPort"></param>
@@ -58,8 +65,8 @@ namespace Staudt.Engineering.LidaRx.Drivers.Sweep
             serialPort = new SerialPortStream(portName, 115200, 8, Parity.None, StopBits.One);
             serialPort.ErrorReceived += SerialPort_ErrorReceived;
 
-            serialPort.ReadTimeout = 500;
-            serialPort.WriteTimeout = 500;
+//            serialPort.ReadTimeout = 500;
+            //serialPort.WriteTimeout = 500;
         }
 
         private void SerialPort_ErrorReceived(object sender, SerialErrorReceivedEventArgs e)
@@ -69,53 +76,70 @@ namespace Staudt.Engineering.LidaRx.Drivers.Sweep
 
         public override void Connect()
         {
+            _semaphoreSlimConnect.Wait();
+
             // already connected
             if (Connected)
                 return;
 
             serialPort.Open();
 
-            var mrCommand = new Protocol.MotorReadyCommand();
-            SimpleCommandTxRx(mrCommand);
+            // make sure we're in a halfway known state...
+            var dxCommand = new StopDataAcquisitionCommand();
+            SimpleCommandTxRx(dxCommand);
 
-            var miCommand = new MotorInformationCommand();
-            SimpleCommandTxRx(miCommand);
-
-            var liCommand = new SampleRateInformationCommand();
-            SimpleCommandTxRx(liCommand);
-
+            // gather information about the device
             var idCommand = new DeviceInformationCommand();
-            SimpleCommandTxRx(idCommand);
-
             var ivCommand = new VersionInformationCommand();
+            SimpleCommandTxRx(idCommand);            
             SimpleCommandTxRx(ivCommand);
 
-            var msCommand = new AdjustMotorSpeedCommand(SweepMotorSpeed.Speed5Hz);
-            SimpleCommandTxRx(msCommand);
+            ExtractDeviceAndVersionInformation(idCommand, ivCommand);
 
-            var lrCommand = new AdjustSampleRateCommand(SweepSampleRate.SampleRate1000);
-            SimpleCommandTxRx(lrCommand);
-            //rialPort.Read()
-
+            _semaphoreSlimConnect.Release();
         }
 
-        void SimpleCommandTxRx(ISweepCommand cmd)
+        public async override Task ConnectAsync()
         {
-            var buffer = new char[cmd.ExpectedAnswerLength];
+            await _semaphoreSlimConnect.WaitAsync();
 
-            // TX then RX
-            serialPort.Write(cmd.Command, 0, cmd.Command.Length);            
-            serialPort.Read(buffer, 0, cmd.ExpectedAnswerLength);
+            // already connected
+            if (Connected)
+                return;
 
-            // process the response
-            cmd.ProcessResponse(buffer);
+            serialPort.Open();
+
+            // make sure we're in a halfway known state...
+            var dxCommand = new StopDataAcquisitionCommand();
+            await SimpleCommandTxRxAsync(dxCommand);
+
+            // gather information about the device
+            var idCommand = new DeviceInformationCommand();
+            var ivCommand = new VersionInformationCommand();
+
+            await SimpleCommandTxRxAsync(idCommand);
+            await SimpleCommandTxRxAsync(ivCommand);
+
+            ExtractDeviceAndVersionInformation(idCommand, ivCommand);
+
+            _semaphoreSlimConnect.Release();
         }
 
-        public override Task ConnectAsync()
+        private void ExtractDeviceAndVersionInformation(DeviceInformationCommand idCommand, VersionInformationCommand ivCommand)
         {
-            throw new NotImplementedException();
-        }
+            this.Info.BitRate = idCommand.SerialBitrate.Value;
+            this.Info.LaserState = idCommand.LaserState.Value;
+            this.Info.Mode = idCommand.Mode.Value;
+            this.Info.Diagnostic = idCommand.Diagnostic.Value;
+            this.Info.MotorSpeed = idCommand.MotorSpeed ?? SweepMotorSpeed.SpeedUnknown;
+            this.Info.SampleRate = SweepConfigHelpers.IntToSweepSampleRate(idCommand.SampleRate.Value);
 
+            this.Info.SerialNumber = ivCommand.SerialNumber.ToString();
+            this.Info.Protocol = ivCommand.ProtocolVersion.Value.ToString();
+            this.Info.FirmwareVersion = ivCommand.FirmwareVersion.ToString();
+            this.Info.HardwareVersion = ivCommand.HardwareVersion.ToString();
+            this.Info.Model = ivCommand.Model;
+        }
 
         public override void Disconnect()
         {
@@ -139,19 +163,43 @@ namespace Staudt.Engineering.LidaRx.Drivers.Sweep
 
         public override void StopScan()
         {
-            throw new NotImplementedException();
+            // make sure we're in a halfway known state...
+            var dxCommand = new StopDataAcquisitionCommand();
+            SimpleCommandTxRx(dxCommand);
         }
 
-        public override Task StopScanAsync()
+        public async override Task StopScanAsync()
         {
-            throw new NotImplementedException();
+            // make sure we're in a halfway known state...
+            var dxCommand = new StopDataAcquisitionCommand();
+            await SimpleCommandTxRxAsync(dxCommand);
         }
 
-        #region Async serial RX
+        #region serial RXTX stuff
 
-        #endregion
+        void SimpleCommandTxRx(ISweepCommand cmd)
+        {
+            var buffer = new char[cmd.ExpectedAnswerLength];
 
-        #region Asyns serial TX
+            // TX then RX
+            serialPort.Write(cmd.Command, 0, cmd.Command.Length);
+            serialPort.Read(buffer, 0, cmd.ExpectedAnswerLength);
+
+            // process the response
+            cmd.ProcessResponse(buffer);
+        }
+
+        async Task SimpleCommandTxRxAsync(ISweepCommand cmd)
+        {
+            var buffer = new byte[cmd.ExpectedAnswerLength];
+
+            // TX then RX
+            await serialPort.WriteAsync(cmd.Command.Select(x => (byte)x).ToArray(), 0, cmd.Command.Length);
+            await serialPort.ReadAsync(buffer, 0, cmd.ExpectedAnswerLength);
+
+            // process the response
+            cmd.ProcessResponse(buffer.Select(x => (char)x).ToArray());
+        }
 
         #endregion
 
@@ -163,6 +211,14 @@ namespace Staudt.Engineering.LidaRx.Drivers.Sweep
             {
                 if (disposing)
                 {
+                    if(Connected && IsScanning)
+                    {
+                        // make sure we're in a halfway known state...
+                        var dxCommand = new StopDataAcquisitionCommand();
+                        SimpleCommandTxRx(dxCommand);
+                    }
+
+                    serialPort.Flush();
                     serialPort.Dispose();
                 }
 

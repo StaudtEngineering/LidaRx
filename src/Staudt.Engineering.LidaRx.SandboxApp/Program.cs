@@ -11,10 +11,18 @@ namespace Staudt.Engineering.LidaRx.SandboxApp
     {
         static void Main(string[] args)
         {
-            using (var sweep = new SweepScanner("COM3"))
+            var t = Task.Run(async () =>
             {
-                sweep.Connect();
-            }
+                using (var sweep = new SweepScanner("COM3"))
+                {
+                    await sweep.ConnectAsync();
+                }
+
+            });
+
+            t.Wait();
+
+            
 
         }
     }

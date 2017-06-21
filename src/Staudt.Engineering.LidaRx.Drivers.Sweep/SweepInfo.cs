@@ -37,9 +37,9 @@ namespace Staudt.Engineering.LidaRx.Drivers.Sweep
         public string SerialNumber { get; internal set; }
 
         public int BitRate { get; internal set; }
-        public byte LaserState { get; internal set; }
-        public byte Mode { get; internal set; }
-        public byte Diagnostic { get; internal set; }
+        public char LaserState { get; internal set; }
+        public char Mode { get; internal set; }
+        public char Diagnostic { get; internal set; }
 
         public SweepMotorSpeed MotorSpeed { get; internal set; } = SweepMotorSpeed.SpeedUnknown;
         public SweepSampleRate SampleRate { get; internal set; } = SweepSampleRate.SampleRateUnknown;

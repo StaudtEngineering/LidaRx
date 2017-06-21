@@ -78,6 +78,9 @@ namespace Staudt.Engineering.LidaRx.Drivers.Sweep
             var mrCommand = new Protocol.MotorReadyCommand();
             SimpleCommandTxRx(mrCommand);
 
+            var miCommand = new MotorInformationCommand();
+            SimpleCommandTxRx(miCommand);
+
             //rialPort.Read()
 
         }

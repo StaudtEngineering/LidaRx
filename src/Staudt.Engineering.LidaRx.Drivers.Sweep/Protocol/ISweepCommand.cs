@@ -6,6 +6,6 @@ namespace Staudt.Engineering.LidaRx.Drivers.Sweep.Protocol
     {
         char[] Command { get; }
         int ExpectedAnswerLength { get; }
-        void ProcessResponse(char[] reponse);
+        void ProcessResponse(char[] response);
     }
 }

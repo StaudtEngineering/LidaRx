@@ -58,8 +58,8 @@ namespace Staudt.Engineering.LidaRx.Drivers.Sweep
             serialPort = new SerialPortStream(portName, 115200, 8, Parity.None, StopBits.One);
             serialPort.ErrorReceived += SerialPort_ErrorReceived;
 
-            serialPort.ReadTimeout = 100;
-            serialPort.WriteTimeout = 100;
+            serialPort.ReadTimeout = 500;
+            serialPort.WriteTimeout = 500;
         }
 
         private void SerialPort_ErrorReceived(object sender, SerialErrorReceivedEventArgs e)
@@ -83,6 +83,12 @@ namespace Staudt.Engineering.LidaRx.Drivers.Sweep
 
             var lrCommand = new SampleRateInformationCommand();
             SimpleCommandTxRx(lrCommand);
+
+            var idCommand = new DeviceInformationCommand();
+            SimpleCommandTxRx(idCommand);
+
+            var ivCommand = new VersionInformationCommand();
+            SimpleCommandTxRx(ivCommand);
 
             //rialPort.Read()
 

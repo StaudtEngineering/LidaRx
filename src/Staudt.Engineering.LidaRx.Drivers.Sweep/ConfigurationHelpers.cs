@@ -50,4 +50,22 @@ namespace Staudt.Engineering.LidaRx.Drivers.Sweep
         SampleRate1000 = 3,
         SampleRateUnknown
     }
+
+    sealed class SweepConfigHelpers
+    {
+        public static SweepSampleRate IntToSweepSampleRate(int value)
+        {
+            switch(value)
+            {
+                case 500:
+                    return SweepSampleRate.SampleRate500;
+                case 750:
+                    return SweepSampleRate.SampleRate750;
+                case 1000:
+                    return SweepSampleRate.SampleRate1000;
+                default:
+                    return SweepSampleRate.SampleRateUnknown;
+            }
+        }
+    }
 }

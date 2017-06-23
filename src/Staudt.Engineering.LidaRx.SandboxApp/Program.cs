@@ -19,8 +19,9 @@ namespace Staudt.Engineering.LidaRx.SandboxApp
                 using (var sweep = new SweepScanner("COM3"))
                 {
                     sweep.Connect();
+                    sweep.SetMotorSpeed(SweepMotorSpeed.Speed2Hz);
 
-                    sweep.OfType<LidarErrorEvent>().Subscribe(x => Console.WriteLine("Error {0}", x.Msg));
+                sweep.OfType<LidarErrorEvent>().Subscribe(x => Console.WriteLine("Error {0}", x.Msg));
 
                     sweep.OfType<LidarPoint>().Buffer(TimeSpan.FromMilliseconds(1000)).Subscribe(x =>
                     {
@@ -34,15 +35,8 @@ namespace Staudt.Engineering.LidaRx.SandboxApp
                     Observable.Timer(TimeSpan.FromSeconds(1), TimeSpan.FromSeconds(1)).Subscribe(x => Console.WriteLine($"Discarded frames: {sweep.DiscardedFrames}"));
                     Observable.Timer(TimeSpan.FromSeconds(0), TimeSpan.FromMilliseconds(250)).Subscribe(x => Console.WriteLine($"Discarded bytes: {sweep.DiscardedBytes}"));
 
-                    Observable.Timer(TimeSpan.FromSeconds(5), TimeSpan.FromSeconds(15)).Subscribe(x =>
-                    {
-                        if(sweep.Info.MotorSpeed == SweepMotorSpeed.Speed5Hz)
-                            sweep.SetMotorSpeed(SweepMotorSpeed.Speed10Hz);
-                        else
-                            sweep.SetMotorSpeed(SweepMotorSpeed.Speed5Hz);
-                    });
 
-                    Observable.Timer(TimeSpan.FromSeconds(5), TimeSpan.FromSeconds(1)).Subscribe(x =>
+                    Observable.Timer(TimeSpan.FromSeconds(1), TimeSpan.FromSeconds(5)).Subscribe(x =>
                     {
                         if (sweep.Info.SampleRate == SweepSampleRate.SampleRate1000)
                             sweep.SetSampleRate(SweepSampleRate.SampleRate750);

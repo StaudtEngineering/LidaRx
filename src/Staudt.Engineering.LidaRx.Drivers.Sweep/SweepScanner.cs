@@ -398,19 +398,20 @@ namespace Staudt.Engineering.LidaRx.Drivers.Sweep
 
             // clear the waiting list
             this.scanProcessingThreads.Clear();
+            this.rxScanBuffer.Clear();
 
             // throwaway stuff in the RX buffer!
-            Thread.Sleep(50);
+            Thread.Sleep(1);
             serialPort.DiscardInBuffer();
 
             // send a second DX command
             serialPort.Write(cmd.Command, 0, cmd.Command.Length);
 
             // throwaway stuff in the RX buffer!
-            Thread.Sleep(50);
+            Thread.Sleep(1);
             serialPort.DiscardInBuffer();
 
-            this.rxScanBuffer.Clear();
+            
             this._isScanning = false;
         }
 
@@ -425,6 +426,10 @@ namespace Staudt.Engineering.LidaRx.Drivers.Sweep
 
         public void SetMotorSpeed(SweepMotorSpeed targetSpeed)
         {
+            // nothing to do...
+            if (this.Info.MotorSpeed == targetSpeed)
+                return;
+
             _semaphoreConfigurationChanges.Wait();
 
             bool restartScanning = _isScanning;
@@ -432,6 +437,9 @@ namespace Staudt.Engineering.LidaRx.Drivers.Sweep
             if (_isScanning)
             {
                 StopScan();
+
+                // leave some time to sweep to recover
+                Thread.Sleep(250);
             }
 
             var cmd = new AdjustMotorSpeedCommand(targetSpeed);
@@ -465,6 +473,9 @@ namespace Staudt.Engineering.LidaRx.Drivers.Sweep
             if (_isScanning)
             {
                 StopScan();
+
+                // leave some time to sweep to recover
+                Thread.Sleep(250);
             }
 
             var cmd = new AdjustSampleRateCommand(targetRate);
@@ -533,6 +544,9 @@ namespace Staudt.Engineering.LidaRx.Drivers.Sweep
         {
             var buffer = new char[cmd.ExpectedAnswerLength];
 
+            // throwaway stuff in the RX buffer!
+            serialPort.DiscardInBuffer();
+
             // TX then RX
             serialPort.Write(cmd.Command, 0, cmd.Command.Length);
             if(serialPort.Read(buffer, 0, cmd.ExpectedAnswerLength) == cmd.ExpectedAnswerLength)
@@ -550,6 +564,9 @@ namespace Staudt.Engineering.LidaRx.Drivers.Sweep
         async Task SimpleCommandTxRxAsync(ISweepCommand cmd)
         {
             var buffer = new byte[cmd.ExpectedAnswerLength];
+
+            // throwaway stuff in the RX buffer!
+            serialPort.DiscardInBuffer();
 
             // TX then RX
             await serialPort.WriteAsync(cmd.Command.Select(x => (byte)x).ToArray(), 0, cmd.Command.Length);

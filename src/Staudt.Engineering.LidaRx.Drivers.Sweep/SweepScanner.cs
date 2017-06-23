@@ -58,13 +58,12 @@ namespace Staudt.Engineering.LidaRx.Drivers.Sweep
         SemaphoreSlim _semaphoreSlimConnect = new SemaphoreSlim(1, 1);
 
         /// <summary>
-        /// THe task that processes the scanner's frames
+        /// Coordination 
         /// </summary>
-        Task processScanFrames = null;
-        Task pollSerialPort = null;
-
-        CancellationTokenSource processScanFramesCts = null;
+        List<Thread> scanProcessingThreads = new List<Thread>();
+        CancellationTokenSource scanProcessingCts;
         SemaphoreSlim _semaphoreSlimScanStart = new SemaphoreSlim(1, 1);
+        SemaphoreSlim _semaphoreConfigurationChanges = new SemaphoreSlim(1, 1);
 
         // rxBuffer queue
         Queue<byte[]> rxScanBuffer = new Queue<byte[]>();
@@ -114,12 +113,7 @@ namespace Staudt.Engineering.LidaRx.Drivers.Sweep
             }
 
             // gather information about the device
-            var idCommand = new DeviceInformationCommand();
-            var ivCommand = new VersionInformationCommand();
-            SimpleCommandTxRx(idCommand);            
-            SimpleCommandTxRx(ivCommand);
-
-            ExtractDeviceAndVersionInformation(idCommand, ivCommand);
+            RetrieveDeviceInformation().Wait();
 
             _semaphoreSlimConnect.Release();
         }
@@ -148,6 +142,13 @@ namespace Staudt.Engineering.LidaRx.Drivers.Sweep
                 throw new Exception("Could not connect in time");
             }
 
+            await RetrieveDeviceInformation();
+
+            _semaphoreSlimConnect.Release();
+        }
+
+        private async Task RetrieveDeviceInformation()
+        {
             // gather information about the device
             var idCommand = new DeviceInformationCommand();
             var ivCommand = new VersionInformationCommand();
@@ -155,13 +156,6 @@ namespace Staudt.Engineering.LidaRx.Drivers.Sweep
             await SimpleCommandTxRxAsync(idCommand);
             await SimpleCommandTxRxAsync(ivCommand);
 
-            ExtractDeviceAndVersionInformation(idCommand, ivCommand);
-
-            _semaphoreSlimConnect.Release();
-        }
-
-        private void ExtractDeviceAndVersionInformation(DeviceInformationCommand idCommand, VersionInformationCommand ivCommand)
-        {
             this.Info.BitRate = idCommand.SerialBitrate.Value;
             this.Info.LaserState = idCommand.LaserState.Value;
             this.Info.Mode = idCommand.Mode.Value;
@@ -252,35 +246,16 @@ namespace Staudt.Engineering.LidaRx.Drivers.Sweep
         {
             this._isScanning = true;
 
-            this.processScanFramesCts = new CancellationTokenSource();
-            this.processScanFrames = Task.Run(() => ProcessLidarScanFrames(), processScanFramesCts.Token);
-            this.pollSerialPort = Task.Run(() => PollSerialPort(), processScanFramesCts.Token);
+            this.scanProcessingCts = new CancellationTokenSource();
 
-            // we're done with scanning
-            Task.WhenAll(this.processScanFrames, this.pollSerialPort).ContinueWith(prev =>
-            {
-                if(prev.IsFaulted)
-                {
-                    // todo
-                }
+            var serialPollThread = new Thread(PollSerialPort);
+            this.scanProcessingThreads.Add(serialPollThread);
 
-                _isScanning = false;
+            var processingThread = new Thread(ProcessLidarScanFrames);
+            this.scanProcessingThreads.Add(processingThread);
 
-            });
-
-
-            Task.WhenAny(this.processScanFrames, this.pollSerialPort).ContinueWith(prev =>
-            {
-                if (prev.IsFaulted)
-                {
-                    // todo
-                }
-
-                // take down the other thread too
-                if(!processScanFramesCts.IsCancellationRequested)
-                    processScanFramesCts.Cancel();
-            });
-
+            serialPollThread.Start();
+            processingThread.Start();
         }
 
         public long DiscardedFrames { get; private set; } = 0;
@@ -290,9 +265,9 @@ namespace Staudt.Engineering.LidaRx.Drivers.Sweep
         {
             while (true)
             {
-                // break the loop if necessary
-                if (processScanFramesCts.IsCancellationRequested)
-                    break;
+                // stop any further processing here...
+                if (scanProcessingCts.IsCancellationRequested)
+                    return;
 
                 byte[] buffer = new byte[1024];
                 var bytes = serialPort.Read(buffer, 0, buffer.Length);
@@ -303,9 +278,6 @@ namespace Staudt.Engineering.LidaRx.Drivers.Sweep
                     rxScanBuffer.Enqueue(buffer);
                 }
             }
-
-            rxScanBuffer.Clear();
-            this._isScanning = false;
         }
 
         private bool ChecksumIsValid(Queue<byte> protentialFrame)
@@ -319,56 +291,36 @@ namespace Staudt.Engineering.LidaRx.Drivers.Sweep
 
         private void ProcessLidarScanFrames()
         {
-            this.ScanCounter++;
-
-            // 8k buffer
-            byte[] buffer = new byte[7];
+            byte[] buffer;
             Queue<byte> potentialFrame = new Queue<byte>(7);
             Queue<byte> scan = new Queue<byte>();
 
-            Action refillBuffer = () =>
+            Action refillScanBuffer = () =>
             {
-                while (scan.Count <= 0)
+                if (rxScanBuffer.Count > 0)
                 {
-                    // break the loop if necessary
-                    if (processScanFramesCts.IsCancellationRequested)
-                        break;
+                    var s = rxScanBuffer.Dequeue();
 
-                    if (rxScanBuffer.Count <= 0)
-                        Thread.Sleep(1);
-                    else
-                    {
-                        var s = rxScanBuffer.Dequeue();
-
-                        if (s == null) continue;
-
-                        foreach (var x in s)
-                            scan.Enqueue(x);
-                    }
+                    foreach (var x in s)
+                        scan.Enqueue(x);
                 }
+                else
+                    Thread.Sleep(1);                
             };
 
             while (true)
             {
-                refillBuffer();
-
-                // break the loop if necessary
-                if (processScanFramesCts.IsCancellationRequested)
-                    break;
-
-                // clear the stack
-                potentialFrame.Clear();
-
                 // get the next 7 bytes
-                while(potentialFrame.Count < 7)
+                while (potentialFrame.Count < 7)
                 {
-                    if (processScanFramesCts.IsCancellationRequested)
-                        break;
-
                     if (scan.Count == 0)
-                        refillBuffer();
+                        refillScanBuffer();
                     else
                         potentialFrame.Enqueue(scan.Dequeue()); // get a byte
+
+                    // exit point
+                    if (scanProcessingCts.IsCancellationRequested)
+                        return;
                 }
 
                 if (!ChecksumIsValid(potentialFrame))
@@ -382,7 +334,7 @@ namespace Staudt.Engineering.LidaRx.Drivers.Sweep
                         // trow away one byte and get the next instead
                         // ...until we get something meaningful
                         if (scan.Count == 0)
-                            refillBuffer();
+                            refillScanBuffer();
                         else
                         {
                             DiscardedBytes++;
@@ -390,8 +342,9 @@ namespace Staudt.Engineering.LidaRx.Drivers.Sweep
                             potentialFrame.Enqueue(scan.Dequeue());
                         }
 
-                        if (processScanFramesCts.IsCancellationRequested)
-                            break;
+                        // exit point
+                        if (scanProcessingCts.IsCancellationRequested)
+                            return;
                     }
                     while (!ChecksumIsValid(potentialFrame));
                 }
@@ -411,33 +364,50 @@ namespace Staudt.Engineering.LidaRx.Drivers.Sweep
                 var carthesianPoint = base.TransfromScannerToSystemCoordinates(azimuth, distance);
                 var scanPacket = new LidarPoint(carthesianPoint, azimuth, distance, signal, this.ScanCounter);
 
-                // break the loop if necessary
-                if (processScanFramesCts.IsCancellationRequested)
-                    break;
+                // exit point
+                if (scanProcessingCts.IsCancellationRequested)
+                    return;
 
                 foreach (var observer in base.observers)
                 {
                     observer.OnNext(scanPacket);
-                }                
-            }
+                }
 
-            this._isScanning = false;
-            this.rxScanBuffer.Clear();
+                // cleanup
+                potentialFrame.Clear();
+            }
         }
 
         public override void StopScan()
         {
-            if(this.IsScanning)
-                this.processScanFramesCts.Cancel();            
-
-            // make sure we're in a halfway known state...
+            // send a stop command...
             var cmd = new StopDataAcquisitionCommand();
             serialPort.Write(cmd.Command, 0, cmd.Command.Length);
-            Thread.Sleep(100);
+
+            // stop the threads
+            scanProcessingCts.Cancel();
+
+            // wait for termination
+            while (this.scanProcessingThreads.Any(x => x.IsAlive))
+            {
+                Thread.Sleep(1);
+            } 
+
+            // clear the waiting list
+            this.scanProcessingThreads.Clear();
+
+            // throwaway stuff in the RX buffer!
+            Thread.Sleep(20);
             serialPort.DiscardInBuffer();
-            serialPort.Write(cmd.Command, 0, cmd.Command.Length);
+
+            // send a second DX command
             SimpleCommandTxRx(cmd);
+
+            // throwaway stuff in the RX buffer!
+            Thread.Sleep(20);
             serialPort.DiscardInBuffer();
+
+            this._isScanning = false;
         }
 
         public async override Task StopScanAsync()
@@ -451,6 +421,8 @@ namespace Staudt.Engineering.LidaRx.Drivers.Sweep
 
         public void SetMotorSpeed(SweepMotorSpeed targetSpeed)
         {
+            _semaphoreConfigurationChanges.Wait();
+
             bool restartScanning = _isScanning;
 
             if (_isScanning)
@@ -464,6 +436,7 @@ namespace Staudt.Engineering.LidaRx.Drivers.Sweep
             if (cmd.Status == AdjustMotorSpeedResult.Success)
             {
                 WaitForStabilizedMotorSpeed(TimeSpan.FromSeconds(10));
+                RetrieveDeviceInformation().Wait();
             }
             else
             {
@@ -475,10 +448,14 @@ namespace Staudt.Engineering.LidaRx.Drivers.Sweep
                 StartScan();
             }
 
+            _semaphoreConfigurationChanges.Release();
+
         }
 
         public void SetSampleRate(SweepSampleRate targetRate)
         {
+            _semaphoreConfigurationChanges.Wait();
+
             bool restartScanning = _isScanning;
 
             if (_isScanning)
@@ -504,6 +481,8 @@ namespace Staudt.Engineering.LidaRx.Drivers.Sweep
             {
                 StartScan();
             }
+
+            _semaphoreConfigurationChanges.Release();
         }
 
         #endregion

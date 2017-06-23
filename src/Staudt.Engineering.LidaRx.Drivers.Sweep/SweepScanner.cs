@@ -77,6 +77,9 @@ namespace Staudt.Engineering.LidaRx.Drivers.Sweep
         {
             serialPort = new SerialPortStream(portName, 115200, 8, Parity.None, StopBits.One);
             serialPort.ErrorReceived += SerialPort_ErrorReceived;
+
+            serialPort.ReadTimeout = 500;
+            serialPort.WriteTimeout = 500;
         }
 
         private void SerialPort_ErrorReceived(object sender, SerialErrorReceivedEventArgs e)
@@ -397,14 +400,14 @@ namespace Staudt.Engineering.LidaRx.Drivers.Sweep
             this.scanProcessingThreads.Clear();
 
             // throwaway stuff in the RX buffer!
-            Thread.Sleep(20);
+            Thread.Sleep(50);
             serialPort.DiscardInBuffer();
 
             // send a second DX command
-            SimpleCommandTxRx(cmd);
+            serialPort.Write(cmd.Command, 0, cmd.Command.Length);
 
             // throwaway stuff in the RX buffer!
-            Thread.Sleep(20);
+            Thread.Sleep(50);
             serialPort.DiscardInBuffer();
 
             this._isScanning = false;
@@ -435,8 +438,8 @@ namespace Staudt.Engineering.LidaRx.Drivers.Sweep
 
             if (cmd.Status == AdjustMotorSpeedResult.Success)
             {
-                WaitForStabilizedMotorSpeed(TimeSpan.FromSeconds(10));
-                RetrieveDeviceInformation().Wait();
+                WaitForStabilizedMotorSpeed(TimeSpan.FromSeconds(30));
+                this.Info.MotorSpeed = targetSpeed;
             }
             else
             {
@@ -468,8 +471,7 @@ namespace Staudt.Engineering.LidaRx.Drivers.Sweep
 
             if(cmd.Status == AdjustSampleRateResult.Success)
             {
-
-
+                this.Info.SampleRate = targetRate;
             }
             else
             {
@@ -532,10 +534,16 @@ namespace Staudt.Engineering.LidaRx.Drivers.Sweep
 
             // TX then RX
             serialPort.Write(cmd.Command, 0, cmd.Command.Length);
-            serialPort.Read(buffer, 0, cmd.ExpectedAnswerLength);
-
-            // process the response
-            cmd.ProcessResponse(buffer);
+            if(serialPort.Read(buffer, 0, cmd.ExpectedAnswerLength) == cmd.ExpectedAnswerLength)
+            {
+                // process the response
+                cmd.ProcessResponse(buffer);
+            }
+            else
+            {
+                // todo / timeout error
+            }
+            
         }
 
         async Task SimpleCommandTxRxAsync(ISweepCommand cmd)

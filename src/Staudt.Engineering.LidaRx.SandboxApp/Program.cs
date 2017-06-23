@@ -42,6 +42,20 @@ namespace Staudt.Engineering.LidaRx.SandboxApp
                             sweep.SetMotorSpeed(SweepMotorSpeed.Speed5Hz);
                     });
 
+                    Observable.Timer(TimeSpan.FromSeconds(5), TimeSpan.FromSeconds(1)).Subscribe(x =>
+                    {
+                        if (sweep.Info.SampleRate == SweepSampleRate.SampleRate1000)
+                            sweep.SetSampleRate(SweepSampleRate.SampleRate750);
+                        else if(sweep.Info.SampleRate == SweepSampleRate.SampleRate750)
+                            sweep.SetSampleRate(SweepSampleRate.SampleRate500);
+                        else
+                            sweep.SetSampleRate(SweepSampleRate.SampleRate1000);
+
+                        Console.WriteLine($"Sample rate set to {sweep.Info.SampleRate}");
+                    });
+
+
+
                 sweep.StartScan();
 
                     while(sweep.IsScanning)

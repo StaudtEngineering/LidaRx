@@ -410,6 +410,7 @@ namespace Staudt.Engineering.LidaRx.Drivers.Sweep
             Thread.Sleep(50);
             serialPort.DiscardInBuffer();
 
+            this.rxScanBuffer.Clear();
             this._isScanning = false;
         }
 

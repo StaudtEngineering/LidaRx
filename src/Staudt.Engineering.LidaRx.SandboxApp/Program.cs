@@ -22,16 +22,9 @@ namespace Staudt.Engineering.LidaRx.SandboxApp
 
                     sweep.OfType<LidarErrorEvent>().Subscribe(x => Console.WriteLine("Error {0}", x.Msg));
 
-                    sweep.OfType<LidarPoint>().GroupBy(x => x.Scan).Subscribe(x =>
+                    sweep.OfType<LidarPoint>().Buffer(TimeSpan.FromMilliseconds(1000)).Subscribe(x =>
                     {
-
-                        x.Buffer(TimeSpan.FromMilliseconds(1000)).Subscribe(y =>
-                        {
-                            if(y.Count > 0)
-                                Console.WriteLine($"Got {y.Count} points, out for scan {x.Key}");
-                        });
-
-
+                         Console.WriteLine($"Got {x.Count} points");
                         
                         
                         //Console.WriteLine($"Got scan frame: X:{x.Point.X} Y:{x.Point.Y} Z:{x.Point.Z}");
@@ -40,6 +33,14 @@ namespace Staudt.Engineering.LidaRx.SandboxApp
 
                     Observable.Timer(TimeSpan.FromSeconds(1), TimeSpan.FromSeconds(1)).Subscribe(x => Console.WriteLine($"Discarded frames: {sweep.DiscardedFrames}"));
                     Observable.Timer(TimeSpan.FromSeconds(0), TimeSpan.FromMilliseconds(250)).Subscribe(x => Console.WriteLine($"Discarded bytes: {sweep.DiscardedBytes}"));
+
+                    Observable.Timer(TimeSpan.FromSeconds(5), TimeSpan.FromSeconds(15)).Subscribe(x =>
+                    {
+                        if(sweep.Info.MotorSpeed == SweepMotorSpeed.Speed5Hz)
+                            sweep.SetMotorSpeed(SweepMotorSpeed.Speed10Hz);
+                        else
+                            sweep.SetMotorSpeed(SweepMotorSpeed.Speed5Hz);
+                    });
 
                 sweep.StartScan();
 

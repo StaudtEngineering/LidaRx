@@ -107,26 +107,11 @@ namespace Staudt.Engineering.LidaRx.Drivers.Sweep
             Thread.Sleep(100);
             serialPort.DiscardInBuffer();
 
-            var mrCommand = new MotorReadyCommand();
-            for(int i = 0; i < 100; i++)
+            if(WaitForStabilizedMotorSpeed(TimeSpan.FromSeconds(10)) == false)
             {
-                try
-                {
-                    SimpleCommandTxRx(mrCommand);
-
-                    if (mrCommand.DeviceReady == true)
-                        break;
-                }
-                catch { }
-
-                Thread.Sleep(100);
-            }
-
-            if(mrCommand.DeviceReady == false)
-            {
+                // todo custom exception
                 throw new Exception("Could not connect in time");
             }
-
 
             // gather information about the device
             var idCommand = new DeviceInformationCommand();
@@ -155,6 +140,13 @@ namespace Staudt.Engineering.LidaRx.Drivers.Sweep
 
             await Task.Delay(100);
             serialPort.DiscardInBuffer();
+
+            // todo: async version of this
+            if (WaitForStabilizedMotorSpeed(TimeSpan.FromSeconds(10)) == false)
+            {
+                // todo custom exception
+                throw new Exception("Could not connect in time");
+            }
 
             // gather information about the device
             var idCommand = new DeviceInformationCommand();
@@ -232,7 +224,7 @@ namespace Staudt.Engineering.LidaRx.Drivers.Sweep
             SimpleCommandTxRx(startScanCommand);
 
             if (startScanCommand.Success == true)
-                _startScanThreadsInternal();
+                StartScanThreadsInternal();
 
             _semaphoreSlimScanStart.Release();
         }
@@ -251,12 +243,12 @@ namespace Staudt.Engineering.LidaRx.Drivers.Sweep
             await SimpleCommandTxRxAsync(startScanCommand);
 
             if (startScanCommand.Success == true)
-                _startScanThreadsInternal();
+                StartScanThreadsInternal();
 
             _semaphoreSlimScanStart.Release();
         }
 
-        private void _startScanThreadsInternal()
+        private void StartScanThreadsInternal()
         {
             this._isScanning = true;
 
@@ -327,6 +319,8 @@ namespace Staudt.Engineering.LidaRx.Drivers.Sweep
 
         private void ProcessLidarScanFrames()
         {
+            this.ScanCounter++;
+
             // 8k buffer
             byte[] buffer = new byte[7];
             Queue<byte> potentialFrame = new Queue<byte>(7);
@@ -336,11 +330,17 @@ namespace Staudt.Engineering.LidaRx.Drivers.Sweep
             {
                 while (scan.Count <= 0)
                 {
-                    if (rxScanBuffer.Count == 0)
+                    // break the loop if necessary
+                    if (processScanFramesCts.IsCancellationRequested)
+                        break;
+
+                    if (rxScanBuffer.Count <= 0)
                         Thread.Sleep(1);
                     else
                     {
                         var s = rxScanBuffer.Dequeue();
+
+                        if (s == null) continue;
 
                         foreach (var x in s)
                             scan.Enqueue(x);
@@ -352,7 +352,6 @@ namespace Staudt.Engineering.LidaRx.Drivers.Sweep
             {
                 refillBuffer();
 
-
                 // break the loop if necessary
                 if (processScanFramesCts.IsCancellationRequested)
                     break;
@@ -363,6 +362,9 @@ namespace Staudt.Engineering.LidaRx.Drivers.Sweep
                 // get the next 7 bytes
                 while(potentialFrame.Count < 7)
                 {
+                    if (processScanFramesCts.IsCancellationRequested)
+                        break;
+
                     if (scan.Count == 0)
                         refillBuffer();
                     else
@@ -388,7 +390,8 @@ namespace Staudt.Engineering.LidaRx.Drivers.Sweep
                             potentialFrame.Enqueue(scan.Dequeue());
                         }
 
-                        
+                        if (processScanFramesCts.IsCancellationRequested)
+                            break;
                     }
                     while (!ChecksumIsValid(potentialFrame));
                 }
@@ -424,7 +427,8 @@ namespace Staudt.Engineering.LidaRx.Drivers.Sweep
 
         public override void StopScan()
         {
-            this.processScanFramesCts.Cancel();            
+            if(this.IsScanning)
+                this.processScanFramesCts.Cancel();            
 
             // make sure we're in a halfway known state...
             var cmd = new StopDataAcquisitionCommand();
@@ -433,6 +437,7 @@ namespace Staudt.Engineering.LidaRx.Drivers.Sweep
             serialPort.DiscardInBuffer();
             serialPort.Write(cmd.Command, 0, cmd.Command.Length);
             SimpleCommandTxRx(cmd);
+            serialPort.DiscardInBuffer();
         }
 
         public async override Task StopScanAsync()
@@ -441,6 +446,104 @@ namespace Staudt.Engineering.LidaRx.Drivers.Sweep
             var dxCommand = new StopDataAcquisitionCommand();
             await SimpleCommandTxRxAsync(dxCommand);
         }
+
+        #region Sweep specific interface
+
+        public void SetMotorSpeed(SweepMotorSpeed targetSpeed)
+        {
+            bool restartScanning = _isScanning;
+
+            if (_isScanning)
+            {
+                StopScan();
+            }
+
+            var cmd = new AdjustMotorSpeedCommand(targetSpeed);
+            SimpleCommandTxRx(cmd);
+
+            if (cmd.Status == AdjustMotorSpeedResult.Success)
+            {
+                WaitForStabilizedMotorSpeed(TimeSpan.FromSeconds(10));
+            }
+            else
+            {
+                // todo?
+            }
+
+            if(restartScanning)
+            {
+                StartScan();
+            }
+
+        }
+
+        public void SetSampleRate(SweepSampleRate targetRate)
+        {
+            bool restartScanning = _isScanning;
+
+            if (_isScanning)
+            {
+                StopScan();
+            }
+
+            var cmd = new AdjustSampleRateCommand(targetRate);
+            SimpleCommandTxRx(cmd);
+
+            if(cmd.Status == AdjustSampleRateResult.Success)
+            {
+
+
+            }
+            else
+            {
+
+
+            }
+
+            if (restartScanning)
+            {
+                StartScan();
+            }
+        }
+
+        #endregion
+
+        #region Helpers
+        /// <summary>
+        /// Wait until motor speed is stabilized
+        /// </summary>
+        /// <param name="timeout"></param>
+        /// <param name="throwOnFail"></param>
+        /// <returns></returns>
+        bool WaitForStabilizedMotorSpeed(TimeSpan timeout, bool throwOnFail = true)
+        {
+            var mrCommand = new MotorReadyCommand();
+            var limit = DateTime.Now + timeout;
+
+            while(DateTime.Now < limit)
+            {
+                try
+                {
+                    SimpleCommandTxRx(mrCommand);
+
+                    if (mrCommand.DeviceReady == true)
+                        break;
+                }
+                catch { }
+
+                Thread.Sleep(50);
+            }
+
+            if (throwOnFail && mrCommand.DeviceReady == false)
+            {
+                // todo: custom exception
+                throw new Exception("Device motor speed did not stabilize in time");
+            }
+
+            return true;
+        }
+
+        #endregion
 
         #region serial RXTX stuff
 

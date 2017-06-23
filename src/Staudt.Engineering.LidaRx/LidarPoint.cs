@@ -37,26 +37,26 @@ namespace Staudt.Engineering.LidaRx
         /// <summary>
         /// The point in carthesian 3d space
         /// </summary>
-        Vector3 Point { get; }
+        public Vector3 Point { get; }
 
         /// <summary>
         /// The azimuth of this sample in degrees
         /// </summary>
-        float Azimuth { get; }
+        public float Azimuth { get; }
 
         /// <summary>
         /// The measured distance in mm
         /// </summary>
-        float Distance { get; }
+        public float Distance { get; }
 
         /// <summary>
         /// Signal strength, higher values equal better confidence
         /// </summary>
-        byte Amplitude { get; }
+        public byte Amplitude { get; }
 
         /// <summary>
         /// A scan counter, overflows
         /// </summary>
-        long Scan { get; }
+        public long Scan { get; }
     }
 }

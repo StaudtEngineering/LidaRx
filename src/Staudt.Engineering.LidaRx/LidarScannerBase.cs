@@ -97,7 +97,7 @@ namespace Staudt.Engineering.LidaRx
         /// <summary>
         /// Observers that have subscribed
         /// </summary>
-        private List<IObserver<ILidarEvent>> observers;
+        protected List<IObserver<ILidarEvent>> observers;
 
         /// <summary>
         /// Subscript to updates from this lidar scanner

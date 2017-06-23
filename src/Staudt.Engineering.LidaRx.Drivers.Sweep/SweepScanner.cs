@@ -22,6 +22,7 @@
 using RJCP.IO.Ports;
 using Staudt.Engineering.LidaRx.Drivers.Sweep.Protocol;
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
@@ -54,7 +55,20 @@ namespace Staudt.Engineering.LidaRx.Drivers.Sweep
         /// <summary>
         /// Semaphore for the connection process
         /// </summary>
-        static SemaphoreSlim _semaphoreSlimConnect = new SemaphoreSlim(1, 1);
+        SemaphoreSlim _semaphoreSlimConnect = new SemaphoreSlim(1, 1);
+
+        /// <summary>
+        /// THe task that processes the scanner's frames
+        /// </summary>
+        Task processScanFrames = null;
+        Task pollSerialPort = null;
+
+        CancellationTokenSource processScanFramesCts = null;
+        SemaphoreSlim _semaphoreSlimScanStart = new SemaphoreSlim(1, 1);
+
+        // rxBuffer queue
+        Queue<byte[]> rxScanBuffer = new Queue<byte[]>();
+
 
         /// <summary>
         /// Creates a new driver for a Scanse.io Sweep LIDAR scanner
@@ -64,14 +78,16 @@ namespace Staudt.Engineering.LidaRx.Drivers.Sweep
         {
             serialPort = new SerialPortStream(portName, 115200, 8, Parity.None, StopBits.One);
             serialPort.ErrorReceived += SerialPort_ErrorReceived;
-
-//            serialPort.ReadTimeout = 500;
-            //serialPort.WriteTimeout = 500;
         }
 
         private void SerialPort_ErrorReceived(object sender, SerialErrorReceivedEventArgs e)
         {
-            // TODO?
+            var msg = new LidarErrorEvent(e.ToString());
+
+            foreach (var observer in base.observers)
+            {
+                observer.OnNext(msg);
+            }
         }
 
         public override void Connect()
@@ -86,7 +102,31 @@ namespace Staudt.Engineering.LidaRx.Drivers.Sweep
 
             // make sure we're in a halfway known state...
             var dxCommand = new StopDataAcquisitionCommand();
-            SimpleCommandTxRx(dxCommand);
+            serialPort.Write(dxCommand.Command, 0, dxCommand.Command.Length);
+
+            Thread.Sleep(100);
+            serialPort.DiscardInBuffer();
+
+            var mrCommand = new MotorReadyCommand();
+            for(int i = 0; i < 100; i++)
+            {
+                try
+                {
+                    SimpleCommandTxRx(mrCommand);
+
+                    if (mrCommand.DeviceReady == true)
+                        break;
+                }
+                catch { }
+
+                Thread.Sleep(100);
+            }
+
+            if(mrCommand.DeviceReady == false)
+            {
+                throw new Exception("Could not connect in time");
+            }
+
 
             // gather information about the device
             var idCommand = new DeviceInformationCommand();
@@ -111,7 +151,10 @@ namespace Staudt.Engineering.LidaRx.Drivers.Sweep
 
             // make sure we're in a halfway known state...
             var dxCommand = new StopDataAcquisitionCommand();
-            await SimpleCommandTxRxAsync(dxCommand);
+            await serialPort.WriteAsync(dxCommand.Command.Select(x => (byte)x).ToArray(), 0, dxCommand.Command.Length);
+
+            await Task.Delay(100);
+            serialPort.DiscardInBuffer();
 
             // gather information about the device
             var idCommand = new DeviceInformationCommand();
@@ -143,29 +186,253 @@ namespace Staudt.Engineering.LidaRx.Drivers.Sweep
 
         public override void Disconnect()
         {
-            throw new NotImplementedException();
+            _semaphoreSlimConnect.Wait();
+
+            if(Connected)
+            {
+                // make sure we're in a halfway known state...
+                var dxCommand = new StopDataAcquisitionCommand();
+                SimpleCommandTxRx(dxCommand);
+
+                // close the serial port
+                serialPort.Close();
+            }            
+
+            _semaphoreSlimConnect.Release();
         }
 
-        public override Task DisconnectAsync()
+        public async override Task DisconnectAsync()
         {
-            throw new NotImplementedException();
+            await _semaphoreSlimConnect.WaitAsync();
+
+            if (Connected)
+            {
+                // make sure we're in a halfway known state...
+                var dxCommand = new StopDataAcquisitionCommand();
+                await SimpleCommandTxRxAsync(dxCommand);
+
+                // close the serial port
+                serialPort.Close();
+            }
+
+            _semaphoreSlimConnect.Release();
         }
 
         public override void StartScan()
         {
-            throw new NotImplementedException();
+            if (!Connected)
+                throw new LidaRxStateException("This instance is not yet connected to the Sweep scanner.");
+
+            _semaphoreSlimScanStart.Wait();
+
+            if (IsScanning)
+                return;
+
+            var startScanCommand = new StartDataAcquisitionCommand();
+            SimpleCommandTxRx(startScanCommand);
+
+            if (startScanCommand.Success == true)
+                _startScanThreadsInternal();
+
+            _semaphoreSlimScanStart.Release();
         }
 
-        public override Task StartScanAsync()
+        public async override Task StartScanAsync()
         {
-            throw new NotImplementedException();
+            if (!Connected)
+                throw new LidaRxStateException("This instance is not yet connected to the Sweep scanner.");
+
+            await _semaphoreSlimScanStart.WaitAsync();
+
+            if (IsScanning)
+                return;
+
+            var startScanCommand = new StartDataAcquisitionCommand();
+            await SimpleCommandTxRxAsync(startScanCommand);
+
+            if (startScanCommand.Success == true)
+                _startScanThreadsInternal();
+
+            _semaphoreSlimScanStart.Release();
+        }
+
+        private void _startScanThreadsInternal()
+        {
+            this._isScanning = true;
+
+            this.processScanFramesCts = new CancellationTokenSource();
+            this.processScanFrames = Task.Run(() => ProcessLidarScanFrames(), processScanFramesCts.Token);
+            this.pollSerialPort = Task.Run(() => PollSerialPort(), processScanFramesCts.Token);
+
+            // we're done with scanning
+            Task.WhenAll(this.processScanFrames, this.pollSerialPort).ContinueWith(prev =>
+            {
+                if(prev.IsFaulted)
+                {
+                    // todo
+                }
+
+                _isScanning = false;
+
+            });
+
+
+            Task.WhenAny(this.processScanFrames, this.pollSerialPort).ContinueWith(prev =>
+            {
+                if (prev.IsFaulted)
+                {
+                    // todo
+                }
+
+                // take down the other thread too
+                if(!processScanFramesCts.IsCancellationRequested)
+                    processScanFramesCts.Cancel();
+            });
+
+        }
+
+        public long DiscardedFrames { get; private set; } = 0;
+        public long DiscardedBytes { get; private set; } = 0;
+
+        private void PollSerialPort()
+        {
+            while (true)
+            {
+                // break the loop if necessary
+                if (processScanFramesCts.IsCancellationRequested)
+                    break;
+
+                byte[] buffer = new byte[1024];
+                var bytes = serialPort.Read(buffer, 0, buffer.Length);
+
+                if (bytes > 0)
+                {
+                    Array.Resize(ref buffer, bytes);
+                    rxScanBuffer.Enqueue(buffer);
+                }
+            }
+
+            rxScanBuffer.Clear();
+            this._isScanning = false;
+        }
+
+        private bool ChecksumIsValid(Queue<byte> protentialFrame)
+        {
+            // checksum validation
+            var checksumByteValue = protentialFrame.ElementAt(6);
+            var checksumCalculated = (protentialFrame.Take(6).Aggregate(0, (acc, x) => acc + x)) % 255;
+
+            return checksumByteValue == checksumCalculated;
+        }
+
+        private void ProcessLidarScanFrames()
+        {
+            // 8k buffer
+            byte[] buffer = new byte[7];
+            Queue<byte> potentialFrame = new Queue<byte>(7);
+            Queue<byte> scan = new Queue<byte>();
+
+            Action refillBuffer = () =>
+            {
+                while (scan.Count <= 0)
+                {
+                    if (rxScanBuffer.Count == 0)
+                        Thread.Sleep(1);
+                    else
+                    {
+                        var s = rxScanBuffer.Dequeue();
+
+                        foreach (var x in s)
+                            scan.Enqueue(x);
+                    }
+                }
+            };
+
+            while (true)
+            {
+                refillBuffer();
+
+
+                // break the loop if necessary
+                if (processScanFramesCts.IsCancellationRequested)
+                    break;
+
+                // clear the stack
+                potentialFrame.Clear();
+
+                // get the next 7 bytes
+                while(potentialFrame.Count < 7)
+                {
+                    if (scan.Count == 0)
+                        refillBuffer();
+                    else
+                        potentialFrame.Enqueue(scan.Dequeue()); // get a byte
+                }
+
+                if (!ChecksumIsValid(potentialFrame))
+                {
+                    // garbage... :S
+                    DiscardedFrames++;
+
+                    // find a whole frame
+                    do
+                    {
+                        // trow away one byte and get the next instead
+                        // ...until we get something meaningful
+                        if (scan.Count == 0)
+                            refillBuffer();
+                        else
+                        {
+                            DiscardedBytes++;
+                            potentialFrame.Dequeue();
+                            potentialFrame.Enqueue(scan.Dequeue());
+                        }
+
+                        
+                    }
+                    while (!ChecksumIsValid(potentialFrame));
+                }
+
+                buffer = potentialFrame.ToArray();
+
+                // extract data
+                var errorSync = buffer[0];
+                var isSync = (errorSync & 0x1) == 1;
+
+                if (isSync) this.ScanCounter++;
+
+                var azimuth = (buffer[1] + (buffer[2] << 8)) / 16.0f;
+                var distance = buffer[3] + (buffer[4] << 8);
+                var signal = buffer[5];
+
+                var carthesianPoint = base.TransfromScannerToSystemCoordinates(azimuth, distance);
+                var scanPacket = new LidarPoint(carthesianPoint, azimuth, distance, signal, this.ScanCounter);
+
+                // break the loop if necessary
+                if (processScanFramesCts.IsCancellationRequested)
+                    break;
+
+                foreach (var observer in base.observers)
+                {
+                    observer.OnNext(scanPacket);
+                }                
+            }
+
+            this._isScanning = false;
+            this.rxScanBuffer.Clear();
         }
 
         public override void StopScan()
         {
+            this.processScanFramesCts.Cancel();            
+
             // make sure we're in a halfway known state...
-            var dxCommand = new StopDataAcquisitionCommand();
-            SimpleCommandTxRx(dxCommand);
+            var cmd = new StopDataAcquisitionCommand();
+            serialPort.Write(cmd.Command, 0, cmd.Command.Length);
+            Thread.Sleep(100);
+            serialPort.DiscardInBuffer();
+            serialPort.Write(cmd.Command, 0, cmd.Command.Length);
+            SimpleCommandTxRx(cmd);
         }
 
         public async override Task StopScanAsync()
@@ -214,8 +481,7 @@ namespace Staudt.Engineering.LidaRx.Drivers.Sweep
                     if(Connected && IsScanning)
                     {
                         // make sure we're in a halfway known state...
-                        var dxCommand = new StopDataAcquisitionCommand();
-                        SimpleCommandTxRx(dxCommand);
+                        StopScan();
                     }
 
                     serialPort.Flush();

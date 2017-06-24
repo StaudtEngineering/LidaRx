@@ -15,56 +15,102 @@ namespace Staudt.Engineering.LidaRx.SandboxApp
     {
         static void Main(string[] args)
         {
-
-                using (var sweep = new SweepScanner("COM3"))
-                {
-                    sweep.Connect();
-                    sweep.SetMotorSpeed(SweepMotorSpeed.Speed2Hz);
+            using (var sweep = new SweepScanner("COM3"))
+            {
+                sweep.Connect();
+                sweep.SetMotorSpeed(SweepMotorSpeed.Speed1Hz);
+                sweep.SetSampleRate(SweepSampleRate.SampleRate1000);
 
                 sweep.OfType<LidarErrorEvent>().Subscribe(x => Console.WriteLine("Error {0}", x.Msg));
 
-                    sweep.OfType<LidarPoint>().Buffer(TimeSpan.FromMilliseconds(1000)).Subscribe(x =>
-                    {
-                         Console.WriteLine($"Got {x.Count} points");
+                /*
+                sweep.OfType<LidarPoint>().Buffer(TimeSpan.FromMilliseconds(1000)).Subscribe(x =>
+                {
+                        Console.WriteLine($"Got {x.Count} points");
                         
                         
-                        //Console.WriteLine($"Got scan frame: X:{x.Point.X} Y:{x.Point.Y} Z:{x.Point.Z}");
-                    },
-                    () => Console.WriteLine("On completed"));
+                    //Console.WriteLine($"Got scan frame: X:{x.Point.X} Y:{x.Point.Y} Z:{x.Point.Z}");
+                },
+                () => Console.WriteLine("On completed"));
+                */
 
-                    Observable.Timer(TimeSpan.FromSeconds(1), TimeSpan.FromSeconds(1)).Subscribe(x => Console.WriteLine($"Discarded frames: {sweep.DiscardedFrames}"));
-                    Observable.Timer(TimeSpan.FromSeconds(0), TimeSpan.FromMilliseconds(250)).Subscribe(x => Console.WriteLine($"Discarded bytes: {sweep.DiscardedBytes}"));
-
-
-                    Observable.Timer(TimeSpan.FromSeconds(1), TimeSpan.FromSeconds(5)).Subscribe(x =>
+                sweep.BufferByScan(TimeSpan.FromMilliseconds(1500))
+                    .SelectMany(x => x)
+                    .Subscribe(scan =>
                     {
-                        if (sweep.Info.SampleRate == SweepSampleRate.SampleRate1000)
-                            sweep.SetSampleRate(SweepSampleRate.SampleRate750);
-                        else if(sweep.Info.SampleRate == SweepSampleRate.SampleRate750)
-                            sweep.SetSampleRate(SweepSampleRate.SampleRate500);
-                        else
-                            sweep.SetSampleRate(SweepSampleRate.SampleRate1000);
-
-                        Console.WriteLine($"Sample rate set to {sweep.Info.SampleRate}");
+                        Console.WriteLine($"Got {scan.Count} points for scan {scan.First().Scan}");
                     });
 
 
 
+                sweep.OfType<LidarPoint>()
+                    .Where(x => x.Distance >= 800 && x.Distance <= 1400)
+                    .PointsInAzimuthRange(45, 125)
+                    .BufferByScan(TimeSpan.FromMilliseconds(1050))
+                    // put all the points in a list again
+                    //.GroupByUntil(x => 1, x => Observable.Timer(TimeSpan.FromMilliseconds(100)))
+                    // 
+                    //.SelectMany(x => x.ToList())
+                    //.Where(x => x.Count >= 10)
+                    //.Throttle(TimeSpan.FromMilliseconds(100))
+                    //.Where(x => x.Count > 10)
+                    /*.SelectMany(group => group.Buffer(2).Timeout(TimeSpan.FromMilliseconds(500)))*/
+                    //.Where(scan => scan.Count >= 2)
+
+                    //.Average(x => x.Distance)
+                    .SelectMany(x => x)
+                    .Subscribe(x =>
+                    {
+
+
+
+
+                        Console.WriteLine($"Distance: {x.Average(y => y.Distance)} / scans {String.Join(", ", x.Select(y => y.Scan).Distinct())} / points {x.Count}");
+
+                    });
+
+                    /*
+                    .SelectMany(x => x.Last().ToList())
+                    .Subscribe(scan =>
+                    {
+                        Console.WriteLine($"Got something in the range / points: {scan.Count} / average distance: {scan.Average(p => p.Distance)}!");
+
+                        //scan.Buffer(TimeSpan.FromMilliseconds(100)).Where(x => x.Count > 2)
+                    },
+                    onCompleted: () => { },
+                    onError: ex =>
+                    {
+                        // blub 
+                    });//*/
+
+                    /*
+                    .Where(x => x.Count() > 2)
+                    //.TimeInterval()
+                    //.Where(x => x.Interval.Milliseconds < 500)                    
+                    .Subscribe(_ =>
+                    {
+                        //_
+
+                        //_.Su
+
+                        Console.WriteLine("Got something in the range!");
+                    });
+
+    */
                 sweep.StartScan();
 
-                    while(sweep.IsScanning)
-                    {
-                    if (Console.ReadLine() != null)
-                        break;
-                    }
-                    //ObservableExtensions.Subscribe(sweep, ;
+                while(sweep.IsScanning)
+                {
+                if (Console.ReadLine() != null)
+                    break;
+                }
+                //ObservableExtensions.Subscribe(sweep, ;
 
                 if(sweep.IsScanning)
                 {
-
+                    sweep.StopScan();
                 }
-                }
-            
+            }           
 
         }
     }

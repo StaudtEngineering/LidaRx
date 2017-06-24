@@ -53,6 +53,12 @@ namespace Staudt.Engineering.LidaRx.Drivers.Sweep
         public SweepInfo Info { get; } = new SweepInfo();
 
         /// <summary>
+        /// As Sweep is very inacurate in the close range, you can choose to discard any point
+        /// closer than MinPointDistance (mm). Defaults to 200mm
+        /// </summary>
+        public float MinPointDistance { get; set; } = 200;
+
+        /// <summary>
         /// Semaphore for the connection process
         /// </summary>
         SemaphoreSlim _semaphoreSlimConnect = new SemaphoreSlim(1, 1);
@@ -313,6 +319,9 @@ namespace Staudt.Engineering.LidaRx.Drivers.Sweep
 
             while (true)
             {
+                // cleanup
+                potentialFrame.Clear();
+
                 // get the next 7 bytes
                 while (potentialFrame.Count < 7)
                 {
@@ -356,28 +365,42 @@ namespace Staudt.Engineering.LidaRx.Drivers.Sweep
 
                 // extract data
                 var errorSync = buffer[0];
-                var isSync = (errorSync & 0x1) == 1;
 
-                if (isSync) this.ScanCounter++;
+                // skip on error packets
+                if ((errorSync & (1 << 1)) == 1)
+                {
+                    // TODO: notify the event stream
+                    continue;
+                }
 
+                // check if this is a sync packet              
+                if ((errorSync & 0x1) == 1)
+                    this.ScanCounter++;
+
+                // get coordinates and signal amplitude
                 var azimuth = (buffer[1] + (buffer[2] << 8)) / 16.0f;
                 var distance = (buffer[3] + (buffer[4] << 8)) * 10;     // convert cm to mm
                 var signal = buffer[5];
 
+                // discard short range points
+                if (distance < this.MinPointDistance)
+                    continue;
+
+                // transform the polar to carthesian coordinates within the applications coordinate 
+                // system (not scanner centric)
                 var carthesianPoint = base.TransfromScannerToSystemCoordinates(azimuth, distance);
-                var scanPacket = new LidarPoint(carthesianPoint, azimuth, distance, signal, this.ScanCounter);
 
                 // exit point
                 if (scanProcessingCts.IsCancellationRequested)
                     return;
 
+                // propagate the new lidar point through the system
+                var scanPacket = new LidarPoint(carthesianPoint, azimuth, distance, signal, this.ScanCounter);
+
                 foreach (var observer in base.observers)
                 {
                     observer.OnNext(scanPacket);
                 }
-
-                // cleanup
-                potentialFrame.Clear();
             }
         }
 

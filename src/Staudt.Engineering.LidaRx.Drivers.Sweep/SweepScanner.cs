@@ -361,7 +361,7 @@ namespace Staudt.Engineering.LidaRx.Drivers.Sweep
                 if (isSync) this.ScanCounter++;
 
                 var azimuth = (buffer[1] + (buffer[2] << 8)) / 16.0f;
-                var distance = buffer[3] + (buffer[4] << 8);
+                var distance = (buffer[3] + (buffer[4] << 8)) * 10;     // convert cm to mm
                 var signal = buffer[5];
 
                 var carthesianPoint = base.TransfromScannerToSystemCoordinates(azimuth, distance);
@@ -426,7 +426,6 @@ namespace Staudt.Engineering.LidaRx.Drivers.Sweep
 
         public void SetMotorSpeed(SweepMotorSpeed targetSpeed)
         {
-            // nothing to do...
             if (this.Info.MotorSpeed == targetSpeed)
                 return;
 

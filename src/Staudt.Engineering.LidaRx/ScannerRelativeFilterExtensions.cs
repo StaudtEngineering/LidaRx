@@ -73,25 +73,40 @@ namespace Staudt.Engineering.LidaRx
         }
 
         /// <summary>
-        /// Filter for at points closer than minDistance in a (sensor centric)  polar range in at least minConsecutiveScans consecutive scans 
+        /// Filter for at points closer than minDistance in a (sensor centric)  polar range
         /// </summary>
         /// <param name="sweep"></param>
         /// <param name="azimuthStart"></param>
         /// <param name="azimuthEnd"></param>
         /// <param name="minDistance"></param>
-        /// <param name="consecutiveScansTimeout"></param>
-        /// <param name="minConsecutiveScans"></param>
         /// <returns></returns>
-        public static IObservable<LidarScan> RadiusRangeMinDistance(
-            this IObservable<ILidarEvent> sweep,
+        public static IObservable<LidarPoint> RadiusRangeMinDistance(
+            this IObservable<LidarPoint> sweep,
             float azimuthStart,
             float azimuthEnd,
             float minDistance)
         {
             return sweep.OfType<LidarPoint>()
                 .Where(x => x.Distance <= minDistance)
-                .PointsInAzimuthRange(azimuthStart: azimuthStart, azimuthEnd: azimuthEnd)
-                .BufferByScan();
-        }    
+                .PointsInAzimuthRange(azimuthStart: azimuthStart, azimuthEnd: azimuthEnd);
+        }
+
+        /// <summary>
+        /// Filter for at points further than maxDistance in a (sensor centric)  polar range
+        /// </summary>
+        /// <param name="source"></param>
+        /// <param name="azimuthStart"></param>
+        /// <param name="azimuthEnd"></param>
+        /// <param name="maxDistance"></param>
+        /// <returns></returns>
+        public static IObservable<LidarPoint> RadiusRangeMaxDistance(
+            this IObservable<LidarPoint> source,
+            float azimuthStart,
+            float azimuthEnd,
+            float maxDistance)
+        {
+            return source.Where(x => x.Distance >= maxDistance)
+                .PointsInAzimuthRange(azimuthStart: azimuthStart, azimuthEnd: azimuthEnd);
+        }
     }
 }

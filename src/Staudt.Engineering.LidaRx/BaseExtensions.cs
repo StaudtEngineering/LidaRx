@@ -35,7 +35,7 @@ namespace Staudt.Engineering.LidaRx
     public static class BaseExtensions
     {
         /// <summary>
-        /// Filter for lidar points only
+        /// Get only lidar points out of the event stream
         /// </summary>
         /// <param name="source"></param>
         /// <returns></returns>
@@ -62,14 +62,14 @@ namespace Staudt.Engineering.LidaRx
         public static IObservable<LidarScan> BufferByScan(this IObservable<LidarPoint> source)
         {
             var scanStream = new Subject<LidarScan>();
-            var concurrentList = new ConcurrentDictionary<long, List<LidarPoint>>();
+            var bufferCollector = new ConcurrentDictionary<long, List<LidarPoint>>();
             long lastScan = -1;
 
             var scanPublishLock = new SemaphoreSlim(1, 1);
 
             source.Subscribe(x =>
                 {
-                    List<LidarPoint> bufferedList = concurrentList.GetOrAdd(x.Scan, (k) => new List<LidarPoint>());
+                    List<LidarPoint> bufferedList = bufferCollector.GetOrAdd(x.Scan, (k) => new List<LidarPoint>());
                     bufferedList.Add(x);
 
                     // we can publish the last scan as it's completed (júst got a point from n+1)
@@ -78,7 +78,7 @@ namespace Staudt.Engineering.LidaRx
                         scanPublishLock.Wait(); // acq. lock
                         List<LidarPoint> lastScanPoints = null;
 
-                        if (concurrentList.TryRemove(lastScan, out lastScanPoints))
+                        if (bufferCollector.TryRemove(lastScan, out lastScanPoints))
                         {
                             var toPublish = new LidarScan(lastScan, lastScanPoints.AsReadOnly());
                             scanStream.OnNext(toPublish);

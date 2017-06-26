@@ -30,15 +30,46 @@ namespace Staudt.Engineering.LidaRx
     /// </summary>
     public static class ScannerRelativeFilterExtensions
     {
-
+        /// <summary>
+        /// Filter by points in an azimuth range
+        /// </summary>
+        /// <param name="source"></param>
+        /// <param name="azimuthStart">Range start azimuth in degrees (in scanner relative coordinates)</param>
+        /// <param name="azimuthEnd">Range end azimuth in degrees (in scanner relative coordinates)</param>
+        /// <returns></returns>
         public static IObservable<LidarPoint> PointsInAzimuthRange(
-            this IObservable<ILidarEvent> source,
+            this IObservable<LidarPoint> source,
             float azimuthStart,
             float azimuthEnd)
         {
-            return source.OfType<LidarPoint>()
-                .Where(x => x.Azimuth >= azimuthStart)
+            // wrap around at 360°
+            azimuthStart = azimuthStart % 360;
+            azimuthEnd = azimuthEnd % 360;
+
+            if (azimuthEnd < azimuthStart)
+                throw new ArgumentException("End azimuth must be bigger than start azimuth");
+
+            return source.Where(x => x.Azimuth >= azimuthStart)
                 .Where(x => x.Azimuth <= azimuthEnd);
+        }
+
+        /// <summary>
+        /// Filter points that are in a distance range (in scanner relative coordinates)
+        /// </summary>
+        /// <param name="source"></param>
+        /// <param name="distanceMin">Minimum distance in mm</param>
+        /// <param name="distanceMax">Maximum distance in mm</param>
+        /// <returns></returns>
+        public static IObservable<LidarPoint> PointsInDistanceRange(
+            this IObservable<LidarPoint> source,
+            float distanceMin,
+            float distanceMax)
+        {
+            if (distanceMax < distanceMin)
+                throw new ArgumentException("Distance min must be smaller than distance max");
+
+            return source.Where(x => x.Distance >= distanceMin)
+                .Where(x => x.Distance <= distanceMax);
         }
 
         /// <summary>
@@ -51,37 +82,16 @@ namespace Staudt.Engineering.LidaRx
         /// <param name="consecutiveScansTimeout"></param>
         /// <param name="minConsecutiveScans"></param>
         /// <returns></returns>
-        public static IObservable<LidarPoint> RadiusRangeMinDistance(
-            this IObservable<ILidarEvent> sweep,
-            float azimuthStart,
-            float azimuthEnd,
-            float minDistance,
-            int minConsecutiveScans,
-            TimeSpan consecutiveScansTimeout)
-        {
-            return sweep.OfType<LidarPoint>()
-                .Where(x => x.Distance <= minDistance)
-                .Where(x => x.Azimuth >= azimuthStart && x.Azimuth <= azimuthEnd)
-                .GroupBy(x => x.Scan)
-                .Buffer(consecutiveScansTimeout, minConsecutiveScans)
-                // discard buffers with less than two scans
-                .Where(x => x.Count >= minConsecutiveScans)
-                // flatten the buffer list         
-                .SelectMany(x => x)
-                // flatten the grouping  
-                .SelectMany(x => x);
-        }
-
-
-        public static IObservable<LidarPoint> RadiusRangeMinDistance(
+        public static IObservable<LidarScan> RadiusRangeMinDistance(
             this IObservable<ILidarEvent> sweep,
             float azimuthStart,
             float azimuthEnd,
             float minDistance)
         {
-            return sweep.RadiusRangeMinDistance(azimuthStart, azimuthEnd, minDistance, 2, TimeSpan.FromMilliseconds(2000));
-        }
-
-    
+            return sweep.OfType<LidarPoint>()
+                .Where(x => x.Distance <= minDistance)
+                .PointsInAzimuthRange(azimuthStart: azimuthStart, azimuthEnd: azimuthEnd)
+                .BufferByScan();
+        }    
     }
 }

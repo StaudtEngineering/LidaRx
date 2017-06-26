@@ -35,11 +35,31 @@ namespace Staudt.Engineering.LidaRx
     public static class BaseExtensions
     {
         /// <summary>
+        /// Filter for lidar points only
+        /// </summary>
+        /// <param name="source"></param>
+        /// <returns></returns>
+        public static IObservable<LidarPoint> OnlyLidarPoints(this IObservable<ILidarEvent> source)
+        {
+            return source.OfType<LidarPoint>();
+        }
+
+        /// <summary>
+        /// Filter for LidarErrorEvents
+        /// </summary>
+        /// <param name="source"></param>
+        /// <returns></returns>
+        public static IObservable<LidarErrorEvent> OnlyErrorEvents(this IObservable<ILidarEvent> source)
+        {
+            return source.OfType<LidarErrorEvent>();
+        }
+
+        /// <summary>
         /// Buffer the points into scans. Introduces a delay of one scan duration
         /// </summary>
         /// <param name="source"></param>
         /// <returns></returns>
-        public static IObservable<LidarScan> BufferByScan(this IObservable<ILidarEvent> source)
+        public static IObservable<LidarScan> BufferByScan(this IObservable<LidarPoint> source)
         {
             var scanStream = new Subject<LidarScan>();
             var concurrentList = new ConcurrentDictionary<long, List<LidarPoint>>();
@@ -47,8 +67,7 @@ namespace Staudt.Engineering.LidaRx
 
             var scanPublishLock = new SemaphoreSlim(1, 1);
 
-            source.OfType<LidarPoint>()
-                .Subscribe(x =>
+            source.Subscribe(x =>
                 {
                     List<LidarPoint> bufferedList = concurrentList.GetOrAdd(x.Scan, (k) => new List<LidarPoint>());
                     bufferedList.Add(x);

@@ -34,13 +34,12 @@ namespace Staudt.Engineering.LidaRx.SandboxApp
                 () => Console.WriteLine("On completed"));
                 */
 
-                sweep.BufferByScan()
+                sweep.OnlyLidarPoints()
+                    .BufferByScan()
                     .Subscribe(scan =>
                     {
                         Console.WriteLine($"Got {scan.Count} points for scan {scan.Scan}");
                     });
-
-
 
                 sweep.OfType<LidarPoint>()
                     .Where(x => x.Distance >= 800 && x.Distance <= 1400)

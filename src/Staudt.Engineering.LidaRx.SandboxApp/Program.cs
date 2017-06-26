@@ -34,11 +34,10 @@ namespace Staudt.Engineering.LidaRx.SandboxApp
                 () => Console.WriteLine("On completed"));
                 */
 
-                sweep.BufferByScan(TimeSpan.FromMilliseconds(1500))
-                    .SelectMany(x => x)
+                sweep.BufferByScan()
                     .Subscribe(scan =>
                     {
-                        Console.WriteLine($"Got {scan.Count} points for scan {scan.First().Scan}");
+                        Console.WriteLine($"Got {scan.Count} points for scan {scan.Scan}");
                     });
 
 
@@ -46,7 +45,7 @@ namespace Staudt.Engineering.LidaRx.SandboxApp
                 sweep.OfType<LidarPoint>()
                     .Where(x => x.Distance >= 800 && x.Distance <= 1400)
                     .PointsInAzimuthRange(45, 125)
-                    .BufferByScan(TimeSpan.FromMilliseconds(1050))
+                    .BufferByScan()
                     // put all the points in a list again
                     //.GroupByUntil(x => 1, x => Observable.Timer(TimeSpan.FromMilliseconds(100)))
                     // 
@@ -58,14 +57,9 @@ namespace Staudt.Engineering.LidaRx.SandboxApp
                     //.Where(scan => scan.Count >= 2)
 
                     //.Average(x => x.Distance)
-                    .SelectMany(x => x)
                     .Subscribe(x =>
                     {
-
-
-
-
-                        Console.WriteLine($"Distance: {x.Average(y => y.Distance)} / scans {String.Join(", ", x.Select(y => y.Scan).Distinct())} / points {x.Count}");
+                        //Console.WriteLine($"Distance: {x.Average(y => y.Distance)} / scans {String.Join(", ", x.Select(y => y.Scan).Distinct())} / points {x.Count}");
 
                     });
 

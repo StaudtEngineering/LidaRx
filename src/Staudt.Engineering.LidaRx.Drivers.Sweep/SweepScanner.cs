@@ -20,6 +20,7 @@
 #endregion
 
 using RJCP.IO.Ports;
+using Staudt.Engineering.LidaRx.Drivers.Sweep.Exceptions;
 using Staudt.Engineering.LidaRx.Drivers.Sweep.Protocol;
 using System;
 using System.Collections.Generic;
@@ -126,10 +127,7 @@ namespace Staudt.Engineering.LidaRx.Drivers.Sweep
             serialPort.DiscardInBuffer();
 
             if(WaitForStabilizedMotorSpeed(TimeSpan.FromSeconds(10)) == false)
-            {
-                // todo custom exception
-                throw new Exception("Could not connect in time");
-            }
+                throw new SweepMotorStabilizationTimeoutException(10);
 
             // gather information about the device
             RetrieveDeviceInformation().Wait();
@@ -156,10 +154,7 @@ namespace Staudt.Engineering.LidaRx.Drivers.Sweep
 
             // todo: async version of this
             if (WaitForStabilizedMotorSpeed(TimeSpan.FromSeconds(10)) == false)
-            {
-                // todo custom exception
-                throw new Exception("Could not connect in time");
-            }
+                throw new SweepMotorStabilizationTimeoutException(10);
 
             await RetrieveDeviceInformation();
 

@@ -23,5 +23,9 @@ namespace Staudt.Engineering.LidaRx.Drivers.Sweep.Exceptions
 {
     public class SweepMotorStabilizationTimeoutException : SweepException
     {
+        public SweepMotorStabilizationTimeoutException(int secondsTimeout) 
+            : base($"Sweep motor speed didn't stabilize in time (timeout = {secondsTimeout}")
+        {
+        }
     }
 }

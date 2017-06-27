@@ -126,10 +126,7 @@ namespace Staudt.Engineering.LidaRx.Drivers.Sweep
             Thread.Sleep(100);
             serialPort.DiscardInBuffer();
 
-            if(WaitForStabilizedMotorSpeed(TimeSpan.FromSeconds(10)) == false)
-                throw new SweepMotorStabilizationTimeoutException(10);
-
-            // gather information about the device
+            WaitForStabilizedMotorSpeed(TimeSpan.FromSeconds(10), throwOnFail: true);
             RetrieveDeviceInformation().Wait();
 
             _semaphoreSlimConnect.Release();
@@ -152,10 +149,7 @@ namespace Staudt.Engineering.LidaRx.Drivers.Sweep
             await Task.Delay(100);
             serialPort.DiscardInBuffer();
 
-            // todo: async version of this
-            if (WaitForStabilizedMotorSpeed(TimeSpan.FromSeconds(10)) == false)
-                throw new SweepMotorStabilizationTimeoutException(10);
-
+            await WaitForStabilizedMotorSpeedAsync(TimeSpan.FromSeconds(10), throwOnFail: true);
             await RetrieveDeviceInformation();
 
             _semaphoreSlimConnect.Release();
@@ -578,8 +572,34 @@ namespace Staudt.Engineering.LidaRx.Drivers.Sweep
 
             if (throwOnFail && mrCommand.DeviceReady == false)
             {
-                // todo: custom exception
-                throw new Exception("Device motor speed did not stabilize in time");
+                throw new SweepMotorStabilizationTimeoutException(timeout.Seconds);
+            }
+
+            return true;
+        }
+
+        async Task<bool> WaitForStabilizedMotorSpeedAsync(TimeSpan timeout, bool throwOnFail = true)
+        {
+            var mrCommand = new MotorReadyCommand();
+            var limit = DateTime.Now + timeout;
+
+            while (DateTime.Now < limit)
+            {
+                try
+                {
+                    await SimpleCommandTxRxAsync(mrCommand);
+
+                    if (mrCommand.DeviceReady == true)
+                        break;
+                }
+                catch { }
+
+                await Task.Delay(50);
+            }
+
+            if (throwOnFail && mrCommand.DeviceReady == false)
+            {
+                throw new SweepMotorStabilizationTimeoutException(timeout.Seconds);
             }
 
             return true;

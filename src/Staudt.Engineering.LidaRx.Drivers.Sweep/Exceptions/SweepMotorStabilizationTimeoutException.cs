@@ -19,16 +19,9 @@
 //
 #endregion
 
-namespace Staudt.Engineering.LidaRx.Drivers.Sweep.Protocol
+namespace Staudt.Engineering.LidaRx.Drivers.Sweep.Exceptions
 {
-    class ResetDeviceCommand : ISweepCommand
+    public class SweepMotorStabilizationTimeoutException : SweepException
     {
-        public char[] Command => new[] { 'R', 'R', '\n' };
-        public int ExpectedAnswerLength => 0;
-
-        public void ProcessResponse(char[] response)
-        {
-            // no response to RR
-        }
     }
 }

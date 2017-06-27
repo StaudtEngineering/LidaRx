@@ -19,16 +19,21 @@
 //
 #endregion
 
-namespace Staudt.Engineering.LidaRx.Drivers.Sweep.Protocol
+namespace Staudt.Engineering.LidaRx.Drivers.Sweep.Exceptions
 {
-    class ResetDeviceCommand : ISweepCommand
+    /// <summary>
+    /// 
+    /// </summary>
+    public class SweepProtocolErrorException : SweepException
     {
-        public char[] Command => new[] { 'R', 'R', '\n' };
-        public int ExpectedAnswerLength => 0;
+        /// <summary>
+        /// Wire format message that generated this exception
+        /// </summary>
+        public char[] SweepMessage { get; private set; }
 
-        public void ProcessResponse(char[] response)
+        public SweepProtocolErrorException(string message, char[] protocolMessage) : base(message)
         {
-            // no response to RR
+            this.SweepMessage = protocolMessage;
         }
     }
 }

@@ -64,6 +64,16 @@ namespace Staudt.Engineering.LidaRx.Drivers.Sweep
         SemaphoreSlim _semaphoreSlimConnect = new SemaphoreSlim(1, 1);
 
         /// <summary>
+        /// Number of discarded frames (because of checksum errors)
+        /// </summary>
+        public long DiscardedFrames { get; private set; } = 0;
+
+        /// <summary>
+        /// Number of discarded bytes (because of lost bytes)
+        /// </summary>
+        public long DiscardedBytes { get; private set; } = 0;
+
+        /// <summary>
         /// Coordination 
         /// </summary>
         List<Thread> scanProcessingThreads = new List<Thread>();
@@ -267,9 +277,6 @@ namespace Staudt.Engineering.LidaRx.Drivers.Sweep
             processingThread.Start();
         }
 
-        public long DiscardedFrames { get; private set; } = 0;
-        public long DiscardedBytes { get; private set; } = 0;
-
         private void PollSerialPort()
         {
             while (true)
@@ -339,6 +346,7 @@ namespace Staudt.Engineering.LidaRx.Drivers.Sweep
                 {
                     // garbage... :S
                     DiscardedFrames++;
+                    var localDiscardedBytes = 0;
 
                     // find a whole frame
                     do
@@ -349,7 +357,7 @@ namespace Staudt.Engineering.LidaRx.Drivers.Sweep
                             refillScanBuffer();
                         else
                         {
-                            DiscardedBytes++;
+                            localDiscardedBytes++;
                             potentialFrame.Dequeue();
                             potentialFrame.Enqueue(scan.Dequeue());
                         }
@@ -359,6 +367,9 @@ namespace Staudt.Engineering.LidaRx.Drivers.Sweep
                             return;
                     }
                     while (!ChecksumIsValid(potentialFrame));
+
+                    this.DiscardedBytes += localDiscardedBytes;
+                    PublishLidarEvent(new LidarErrorEvent($"Checksum error, had to discard {localDiscardedBytes} bytes to recover to a valid read window"));
                 }
 
                 buffer = potentialFrame.ToArray();
@@ -369,6 +380,7 @@ namespace Staudt.Engineering.LidaRx.Drivers.Sweep
                 // skip on error packets
                 if ((errorSync & (1 << 1)) == 1)
                 {
+                    PublishLidarEvent(new LidarErrorEvent("Communication error with LIDAR module (Sweep error bit E0)"));
                     // TODO: notify the event stream
                     continue;
                 }
@@ -396,17 +408,13 @@ namespace Staudt.Engineering.LidaRx.Drivers.Sweep
 
                 // propagate the new lidar point through the system
                 var scanPacket = new LidarPoint(carthesianPoint, azimuth, distance, signal, this.ScanCounter);
-
-                foreach (var observer in base.observers)
-                {
-                    observer.OnNext(scanPacket);
-                }
+                PublishLidarEvent(scanPacket);
             }
         }
 
         public override void StopScan()
         {
-            // send a stop command...
+            // send a stop command to sweep
             var cmd = new StopDataAcquisitionCommand();
             serialPort.Write(cmd.Command, 0, cmd.Command.Length);
 
@@ -419,7 +427,6 @@ namespace Staudt.Engineering.LidaRx.Drivers.Sweep
                 Thread.Sleep(1);
             } 
 
-            // clear the waiting list
             this.scanProcessingThreads.Clear();
             this.rxScanBuffer.Clear();
 
@@ -440,9 +447,34 @@ namespace Staudt.Engineering.LidaRx.Drivers.Sweep
 
         public async override Task StopScanAsync()
         {
-            // make sure we're in a halfway known state...
-            var dxCommand = new StopDataAcquisitionCommand();
-            await SimpleCommandTxRxAsync(dxCommand);
+            // send a stop command to sweep
+            var cmd = new StopDataAcquisitionCommand();
+            var cmdBytes = cmd.Command.Select(x => (byte)x).ToArray();
+            await serialPort.WriteAsync(cmdBytes, 0, cmdBytes.Length);
+
+            // stop the threads
+            scanProcessingCts.Cancel();
+
+            // wait for termination
+            while (this.scanProcessingThreads.Any(x => x.IsAlive))
+            {
+                await Task.Delay(1);
+            }
+
+            this.scanProcessingThreads.Clear();
+            this.rxScanBuffer.Clear();
+
+            await Task.Delay(1);
+            serialPort.DiscardInBuffer();
+
+            // send a second DX command
+            await serialPort.WriteAsync(cmdBytes, 0, cmdBytes.Length);
+
+            // throwaway stuff in the RX buffer!
+            Thread.Sleep(1);
+            serialPort.DiscardInBuffer();
+
+            this._isScanning = false;
         }
 
         #region Sweep specific interface
@@ -460,7 +492,7 @@ namespace Staudt.Engineering.LidaRx.Drivers.Sweep
             {
                 StopScan();
 
-                // leave some time to sweep to recover
+                // give sweep some time to recover
                 Thread.Sleep(250);
             }
 
@@ -474,7 +506,7 @@ namespace Staudt.Engineering.LidaRx.Drivers.Sweep
             }
             else
             {
-                // todo?
+                throw new SweepProtocolErrorException($"Adjust motor speed command failed with status {cmd.Status}", null);
             }
 
             if(restartScanning)
@@ -496,7 +528,7 @@ namespace Staudt.Engineering.LidaRx.Drivers.Sweep
             {
                 StopScan();
 
-                // leave some time to sweep to recover
+                // give sweep some time to recover
                 Thread.Sleep(250);
             }
 
@@ -558,6 +590,14 @@ namespace Staudt.Engineering.LidaRx.Drivers.Sweep
             return true;
         }
 
+        void PublishLidarEvent(ILidarEvent ev)
+        {
+            foreach (var observer in base.observers)
+            {
+                observer.OnNext(ev);
+            }
+        }
+
         #endregion
 
         #region serial RXTX stuff
@@ -571,14 +611,17 @@ namespace Staudt.Engineering.LidaRx.Drivers.Sweep
 
             // TX then RX
             serialPort.Write(cmd.Command, 0, cmd.Command.Length);
-            if(serialPort.Read(buffer, 0, cmd.ExpectedAnswerLength) == cmd.ExpectedAnswerLength)
+            var bytesRead = serialPort.Read(buffer, 0, cmd.ExpectedAnswerLength);
+
+            if (bytesRead == cmd.ExpectedAnswerLength)
             {
-                // process the response
                 cmd.ProcessResponse(buffer);
             }
             else
             {
-                // todo / timeout error
+                throw new SweepProtocolErrorException(
+                    $"Answer was {bytesRead} bytes long instead of expected {cmd.ExpectedAnswerLength}",
+                    buffer.Select(x => (char)x).ToArray());
             }
             
         }
@@ -592,10 +635,18 @@ namespace Staudt.Engineering.LidaRx.Drivers.Sweep
 
             // TX then RX
             await serialPort.WriteAsync(cmd.Command.Select(x => (byte)x).ToArray(), 0, cmd.Command.Length);
-            await serialPort.ReadAsync(buffer, 0, cmd.ExpectedAnswerLength);
+            var bytesRead = await serialPort.ReadAsync(buffer, 0, cmd.ExpectedAnswerLength);
 
-            // process the response
-            cmd.ProcessResponse(buffer.Select(x => (char)x).ToArray());
+            if(bytesRead == cmd.ExpectedAnswerLength)
+            {
+                cmd.ProcessResponse(buffer.Select(x => (char)x).ToArray());
+            }
+            else
+            {
+                throw new SweepProtocolErrorException(
+                    $"Answer was {bytesRead} bytes long instead of expected {cmd.ExpectedAnswerLength}",
+                    buffer.Select(x => (char)x).ToArray());
+            }           
         }
 
         #endregion

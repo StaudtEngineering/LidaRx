@@ -19,16 +19,11 @@
 //
 #endregion
 
-namespace Staudt.Engineering.LidaRx.Drivers.Sweep.Protocol
-{
-    class ResetDeviceCommand : ISweepCommand
-    {
-        public char[] Command => new[] { 'R', 'R', '\n' };
-        public int ExpectedAnswerLength => 0;
+using System;
 
-        public void ProcessResponse(char[] response)
-        {
-            // no response to RR
-        }
+namespace Staudt.Engineering.LidaRx.Drivers.Sweep.Exceptions
+{
+    public abstract class SweepException : Exception
+    {
     }
 }

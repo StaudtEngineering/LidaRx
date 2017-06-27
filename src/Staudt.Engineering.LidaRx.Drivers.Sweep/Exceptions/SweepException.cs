@@ -23,7 +23,13 @@ using System;
 
 namespace Staudt.Engineering.LidaRx.Drivers.Sweep.Exceptions
 {
+    /// <summary>
+    /// Just an abstract base for Sweep exceptions
+    /// </summary>
     public abstract class SweepException : Exception
     {
+        public SweepException(string msg) : base(msg)
+        {
+        }
     }
 }

@@ -304,14 +304,18 @@ namespace Staudt.Engineering.LidaRx.Drivers.Sweep
         /// Set sweep the motor speed
         /// </summary>
         /// <param name="targetSpeed"></param>
-        public void SetMotorSpeed(SweepMotorSpeed targetSpeed)
+        /// <param name="smartInterleave">Automatically pause scanning if necessary to adjust the speed, then resume scanning</param>
+        public void SetMotorSpeed(SweepMotorSpeed targetSpeed, bool smartInterleave = true)
         {
             if (this.Info.MotorSpeed == targetSpeed)
                 return;
 
-            _semaphoreConfigurationChanges.Wait();
-
             bool restartScanning = _isScanning;
+
+            if (_isScanning && !smartInterleave)
+                throw new InvalidOperationException("Cannot change device configuration while scan is running");
+
+            _semaphoreConfigurationChanges.Wait();
 
             if (_isScanning)
             {
@@ -343,14 +347,64 @@ namespace Staudt.Engineering.LidaRx.Drivers.Sweep
         }
 
         /// <summary>
+        /// Set sweep the motor speed
+        /// </summary>
+        /// <param name="targetSpeed"></param>
+        /// <param name="smartInterleave">Automatically pause scanning if necessary to adjust the speed, then resume scanning</param>
+        public async Task SetMotorSpeedAsync(SweepMotorSpeed targetSpeed, bool smartInterleave = true)
+        {
+            if (this.Info.MotorSpeed == targetSpeed)
+                return;
+
+            bool restartScanning = _isScanning;
+
+            if(_isScanning && !smartInterleave)
+                throw new InvalidOperationException("Cannot change device configuration while scan is running");
+
+            await _semaphoreConfigurationChanges.WaitAsync();
+
+            if (_isScanning)
+            {
+                await StopScanAsync();
+
+                // give sweep some time to recover
+                await Task.Delay(250);
+            }
+
+            var cmd = new AdjustMotorSpeedCommand(targetSpeed);
+            await SimpleCommandTxRxAsync(cmd);
+
+            if (cmd.Status == AdjustMotorSpeedResult.Success)
+            {
+                await WaitForStabilizedMotorSpeedAsync(TimeSpan.FromSeconds(30));
+                this.Info.MotorSpeed = targetSpeed;
+            }
+            else
+            {
+                throw new SweepProtocolErrorException($"Adjust motor speed command failed with status {cmd.Status}", null);
+            }
+
+            if (restartScanning)
+            {
+                await StartScanAsync();
+            }
+
+            _semaphoreConfigurationChanges.Release();
+        }
+
+        /// <summary>
         /// Set the sample rate
         /// </summary>
         /// <param name="targetRate"></param>
-        public void SetSampleRate(SweepSampleRate targetRate)
+        /// <param name="smartInterleave">Automatically pause scanning if necessary to adjust the sample rate, then resume scanning</param>
+        public void SetSampleRate(SweepSampleRate targetRate, bool smartInterleave = true)
         {
-            _semaphoreConfigurationChanges.Wait();
-
             bool restartScanning = _isScanning;
+
+            if (_isScanning && !smartInterleave)
+                throw new InvalidOperationException("Cannot change device configuration while scan is running");
+
+            _semaphoreConfigurationChanges.Wait();
 
             if (_isScanning)
             {
@@ -375,6 +429,48 @@ namespace Staudt.Engineering.LidaRx.Drivers.Sweep
             if (restartScanning)
             {
                 StartScan();
+            }
+
+            _semaphoreConfigurationChanges.Release();
+        }
+
+        /// <summary>
+        /// Set the sample rate
+        /// </summary>
+        /// <param name="targetRate"></param>
+        /// <param name="smartInterleave">Automatically pause scanning if necessary to adjust the sample rate, then resume scanning</param>
+        public async Task SetSampleRateAsync(SweepSampleRate targetRate, bool smartInterleave = true)
+        {
+            bool restartScanning = _isScanning;
+
+            if (_isScanning && !smartInterleave)
+                throw new InvalidOperationException("Cannot change device configuration while scan is running");
+
+            await _semaphoreConfigurationChanges.WaitAsync();
+
+            if (_isScanning)
+            {
+                await StopScanAsync();
+
+                // give sweep some time to recover
+                await Task.Delay(250);
+            }
+
+            var cmd = new AdjustSampleRateCommand(targetRate);
+            await SimpleCommandTxRxAsync(cmd);
+
+            if (cmd.Status == AdjustSampleRateResult.Success)
+            {
+                this.Info.SampleRate = targetRate;
+            }
+            else
+            {
+                throw new SweepProtocolErrorException($"Adjust sample rate command failed with status {cmd.Status}", null);
+            }
+
+            if (restartScanning)
+            {
+                await StartScanAsync();
             }
 
             _semaphoreConfigurationChanges.Release();
@@ -409,6 +505,72 @@ namespace Staudt.Engineering.LidaRx.Drivers.Sweep
             SimpleCommandTxRx(ivCommand);
 
             FillDeviceInfo(idCommand, ivCommand);
+        }
+
+        /// <summary>
+        /// Wait until motor speed is stabilized
+        /// </summary>
+        /// <param name="timeout"></param>
+        /// <param name="throwOnFail">Throw an exception on failure instead of just returning false</param>
+        /// <returns>True on success</returns>
+        bool WaitForStabilizedMotorSpeed(TimeSpan timeout, bool throwOnFail = true)
+        {
+            var mrCommand = new MotorReadyCommand();
+            var limit = DateTime.Now + timeout;
+
+            while (DateTime.Now < limit)
+            {
+                try
+                {
+                    SimpleCommandTxRx(mrCommand);
+
+                    if (mrCommand.DeviceReady == true)
+                        break;
+                }
+                catch { }
+
+                Thread.Sleep(50);
+            }
+
+            if (throwOnFail && mrCommand.DeviceReady == false)
+            {
+                throw new SweepMotorStabilizationTimeoutException(timeout.Seconds);
+            }
+
+            return true;
+        }
+
+        /// <summary>
+        /// Wait until motor speed is stabilized
+        /// </summary>
+        /// <param name="timeout"></param>
+        /// <param name="throwOnFail">Throw an exception on failure instead of just returning false</param>
+        /// <returns>True on success</returns>
+        async Task<bool> WaitForStabilizedMotorSpeedAsync(TimeSpan timeout, bool throwOnFail = true)
+        {
+            var mrCommand = new MotorReadyCommand();
+            var limit = DateTime.Now + timeout;
+
+            while (DateTime.Now < limit)
+            {
+                try
+                {
+                    await SimpleCommandTxRxAsync(mrCommand);
+
+                    if (mrCommand.DeviceReady == true)
+                        break;
+                }
+                catch { }
+
+                await Task.Delay(50);
+            }
+
+            if (throwOnFail && mrCommand.DeviceReady == false)
+            {
+                throw new SweepMotorStabilizationTimeoutException(timeout.Seconds);
+            }
+
+            return true;
         }
 
         #endregion
@@ -519,7 +681,6 @@ namespace Staudt.Engineering.LidaRx.Drivers.Sweep
                 if ((errorSync & (1 << 1)) == 1)
                 {
                     PublishLidarEvent(new LidarErrorEvent("Communication error with LIDAR module (Sweep error bit E0)"));
-                    // TODO: notify the event stream
                     continue;
                 }
 
@@ -566,66 +727,6 @@ namespace Staudt.Engineering.LidaRx.Drivers.Sweep
             this.Info.Model = ivCommand.Model;
         }
 
-        /// <summary>
-        /// Wait until motor speed is stabilized
-        /// </summary>
-        /// <param name="timeout"></param>
-        /// <param name="throwOnFail"></param>
-        /// <returns></returns>
-        bool WaitForStabilizedMotorSpeed(TimeSpan timeout, bool throwOnFail = true)
-        {
-            var mrCommand = new MotorReadyCommand();
-            var limit = DateTime.Now + timeout;
-
-            while(DateTime.Now < limit)
-            {
-                try
-                {
-                    SimpleCommandTxRx(mrCommand);
-
-                    if (mrCommand.DeviceReady == true)
-                        break;
-                }
-                catch { }
-
-                Thread.Sleep(50);
-            }
-
-            if (throwOnFail && mrCommand.DeviceReady == false)
-            {
-                throw new SweepMotorStabilizationTimeoutException(timeout.Seconds);
-            }
-
-            return true;
-        }
-
-        async Task<bool> WaitForStabilizedMotorSpeedAsync(TimeSpan timeout, bool throwOnFail = true)
-        {
-            var mrCommand = new MotorReadyCommand();
-            var limit = DateTime.Now + timeout;
-
-            while (DateTime.Now < limit)
-            {
-                try
-                {
-                    await SimpleCommandTxRxAsync(mrCommand);
-
-                    if (mrCommand.DeviceReady == true)
-                        break;
-                }
-                catch { }
-
-                await Task.Delay(50);
-            }
-
-            if (throwOnFail && mrCommand.DeviceReady == false)
-            {
-                throw new SweepMotorStabilizationTimeoutException(timeout.Seconds);
-            }
-
-            return true;
-        }
-
         void PublishLidarEvent(ILidarEvent ev)
         {
             foreach (var observer in base.observers)
@@ -636,7 +737,7 @@ namespace Staudt.Engineering.LidaRx.Drivers.Sweep
 
         #endregion
 
-        #region serial RXTX stuff
+        #region Serial RXTX stuff
 
         void SimpleCommandTxRx(ISweepCommand cmd)
         {
@@ -704,9 +805,6 @@ namespace Staudt.Engineering.LidaRx.Drivers.Sweep
                     serialPort.Flush();
                     serialPort.Dispose();
                 }
-
-                // TODO: disposal of non-nanaged ressources here
-                // TODO: set fields null if required
 
                 disposedValue = true;
             }

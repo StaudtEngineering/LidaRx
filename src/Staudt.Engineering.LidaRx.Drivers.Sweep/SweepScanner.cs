@@ -93,20 +93,10 @@ namespace Staudt.Engineering.LidaRx.Drivers.Sweep
         public SweepScanner(string portName)
         {
             serialPort = new SerialPortStream(portName, 115200, 8, Parity.None, StopBits.One);
-            serialPort.ErrorReceived += SerialPort_ErrorReceived;
+            serialPort.ErrorReceived += (sender, e) => PublishLidarEvent(new LidarErrorEvent(e.ToString()));
 
             serialPort.ReadTimeout = 500;
             serialPort.WriteTimeout = 500;
-        }
-
-        private void SerialPort_ErrorReceived(object sender, SerialErrorReceivedEventArgs e)
-        {
-            var msg = new LidarErrorEvent(e.ToString());
-
-            foreach (var observer in base.observers)
-            {
-                observer.OnNext(msg);
-            }
         }
 
         public override void Connect()
@@ -127,7 +117,7 @@ namespace Staudt.Engineering.LidaRx.Drivers.Sweep
             serialPort.DiscardInBuffer();
 
             WaitForStabilizedMotorSpeed(TimeSpan.FromSeconds(10), throwOnFail: true);
-            RetrieveDeviceInformation().Wait();
+            UpdateDeviceInfo();
 
             _semaphoreSlimConnect.Release();
         }
@@ -150,33 +140,10 @@ namespace Staudt.Engineering.LidaRx.Drivers.Sweep
             serialPort.DiscardInBuffer();
 
             await WaitForStabilizedMotorSpeedAsync(TimeSpan.FromSeconds(10), throwOnFail: true);
-            await RetrieveDeviceInformation();
+            await UpdateDeviceInfoAsync();
 
             _semaphoreSlimConnect.Release();
-        }
-
-        private async Task RetrieveDeviceInformation()
-        {
-            // gather information about the device
-            var idCommand = new DeviceInformationCommand();
-            var ivCommand = new VersionInformationCommand();
-
-            await SimpleCommandTxRxAsync(idCommand);
-            await SimpleCommandTxRxAsync(ivCommand);
-
-            this.Info.BitRate = idCommand.SerialBitrate.Value;
-            this.Info.LaserState = idCommand.LaserState.Value;
-            this.Info.Mode = idCommand.Mode.Value;
-            this.Info.Diagnostic = idCommand.Diagnostic.Value;
-            this.Info.MotorSpeed = idCommand.MotorSpeed ?? SweepMotorSpeed.SpeedUnknown;
-            this.Info.SampleRate = SweepConfigHelpers.IntToSweepSampleRate(idCommand.SampleRate.Value);
-
-            this.Info.SerialNumber = ivCommand.SerialNumber.ToString();
-            this.Info.Protocol = ivCommand.ProtocolVersion.Value.ToString();
-            this.Info.FirmwareVersion = ivCommand.FirmwareVersion.ToString();
-            this.Info.HardwareVersion = ivCommand.HardwareVersion.ToString();
-            this.Info.Model = ivCommand.Model;
-        }
+        }     
 
         public override void Disconnect()
         {
@@ -266,6 +233,188 @@ namespace Staudt.Engineering.LidaRx.Drivers.Sweep
             processingThread.Start();
         }
 
+        public override void StopScan()
+        {
+            // send a stop command to sweep
+            var cmd = new StopDataAcquisitionCommand();
+            serialPort.Write(cmd.Command, 0, cmd.Command.Length);
+
+            // stop the threads
+            scanProcessingCts.Cancel();
+
+            // wait for termination
+            while (this.scanProcessingThreads.Any(x => x.IsAlive))
+            {
+                Thread.Sleep(1);
+            } 
+
+            this.scanProcessingThreads.Clear();
+            this.rxScanBuffer.Clear();
+
+            // throwaway stuff in the RX buffer!
+            Thread.Sleep(1);
+            serialPort.DiscardInBuffer();
+
+            // send a second DX command
+            serialPort.Write(cmd.Command, 0, cmd.Command.Length);
+
+            // throwaway stuff in the RX buffer!
+            Thread.Sleep(1);
+            serialPort.DiscardInBuffer();
+
+            
+            this._isScanning = false;
+        }
+
+        public async override Task StopScanAsync()
+        {
+            // send a stop command to sweep
+            var cmd = new StopDataAcquisitionCommand();
+            var cmdBytes = cmd.Command.Select(x => (byte)x).ToArray();
+            await serialPort.WriteAsync(cmdBytes, 0, cmdBytes.Length);
+
+            // stop the threads
+            scanProcessingCts.Cancel();
+
+            // wait for termination
+            while (this.scanProcessingThreads.Any(x => x.IsAlive))
+            {
+                await Task.Delay(1);
+            }
+
+            this.scanProcessingThreads.Clear();
+            this.rxScanBuffer.Clear();
+
+            await Task.Delay(1);
+            serialPort.DiscardInBuffer();
+
+            // send a second DX command
+            await serialPort.WriteAsync(cmdBytes, 0, cmdBytes.Length);
+
+            // throwaway stuff in the RX buffer!
+            Thread.Sleep(1);
+            serialPort.DiscardInBuffer();
+
+            this._isScanning = false;
+        }
+
+        #region Sweep specific interface
+
+        /// <summary>
+        /// Set sweep the motor speed
+        /// </summary>
+        /// <param name="targetSpeed"></param>
+        public void SetMotorSpeed(SweepMotorSpeed targetSpeed)
+        {
+            if (this.Info.MotorSpeed == targetSpeed)
+                return;
+
+            _semaphoreConfigurationChanges.Wait();
+
+            bool restartScanning = _isScanning;
+
+            if (_isScanning)
+            {
+                StopScan();
+
+                // give sweep some time to recover
+                Thread.Sleep(250);
+            }
+
+            var cmd = new AdjustMotorSpeedCommand(targetSpeed);
+            SimpleCommandTxRx(cmd);
+
+            if (cmd.Status == AdjustMotorSpeedResult.Success)
+            {
+                WaitForStabilizedMotorSpeed(TimeSpan.FromSeconds(30));
+                this.Info.MotorSpeed = targetSpeed;
+            }
+            else
+            {
+                throw new SweepProtocolErrorException($"Adjust motor speed command failed with status {cmd.Status}", null);
+            }
+
+            if(restartScanning)
+            {
+                StartScan();
+            }
+
+            _semaphoreConfigurationChanges.Release();
+        }
+
+        /// <summary>
+        /// Set the sample rate
+        /// </summary>
+        /// <param name="targetRate"></param>
+        public void SetSampleRate(SweepSampleRate targetRate)
+        {
+            _semaphoreConfigurationChanges.Wait();
+
+            bool restartScanning = _isScanning;
+
+            if (_isScanning)
+            {
+                StopScan();
+
+                // give sweep some time to recover
+                Thread.Sleep(250);
+            }
+
+            var cmd = new AdjustSampleRateCommand(targetRate);
+            SimpleCommandTxRx(cmd);
+
+            if(cmd.Status == AdjustSampleRateResult.Success)
+            {
+                this.Info.SampleRate = targetRate;
+            }
+            else
+            {
+                throw new SweepProtocolErrorException($"Adjust sample rate command failed with status {cmd.Status}", null);
+            }
+
+            if (restartScanning)
+            {
+                StartScan();
+            }
+
+            _semaphoreConfigurationChanges.Release();
+        }
+
+        /// <summary>
+        /// Send ID & IV commands to update the device info property
+        /// </summary>
+        /// <returns></returns>
+        public async Task UpdateDeviceInfoAsync()
+        {
+            // gather information about the device
+            var idCommand = new DeviceInformationCommand();
+            var ivCommand = new VersionInformationCommand();
+
+            await SimpleCommandTxRxAsync(idCommand);
+            await SimpleCommandTxRxAsync(ivCommand);
+
+            FillDeviceInfo(idCommand, ivCommand);
+        }
+
+        /// <summary>
+        /// Send ID & IV commands to update the device info property
+        /// </summary>
+        public void UpdateDeviceInfo()
+        {
+            // gather information about the device
+            var idCommand = new DeviceInformationCommand();
+            var ivCommand = new VersionInformationCommand();
+
+            SimpleCommandTxRx(idCommand);
+            SimpleCommandTxRx(ivCommand);
+
+            FillDeviceInfo(idCommand, ivCommand);
+        }
+
+        #endregion
+
+        #region Helpers
+
         private void PollSerialPort()
         {
             while (true)
@@ -310,7 +459,7 @@ namespace Staudt.Engineering.LidaRx.Drivers.Sweep
                         scan.Enqueue(x);
                 }
                 else
-                    Thread.Sleep(1);                
+                    Thread.Sleep(1);
             };
 
             while (true)
@@ -401,150 +550,22 @@ namespace Staudt.Engineering.LidaRx.Drivers.Sweep
             }
         }
 
-        public override void StopScan()
+        private void FillDeviceInfo(DeviceInformationCommand idCommand, VersionInformationCommand ivCommand)
         {
-            // send a stop command to sweep
-            var cmd = new StopDataAcquisitionCommand();
-            serialPort.Write(cmd.Command, 0, cmd.Command.Length);
+            this.Info.BitRate = idCommand.SerialBitrate.Value;
+            this.Info.LaserState = idCommand.LaserState.Value;
+            this.Info.Mode = idCommand.Mode.Value;
+            this.Info.Diagnostic = idCommand.Diagnostic.Value;
+            this.Info.MotorSpeed = idCommand.MotorSpeed ?? SweepMotorSpeed.SpeedUnknown;
+            this.Info.SampleRate = SweepConfigHelpers.IntToSweepSampleRate(idCommand.SampleRate.Value);
 
-            // stop the threads
-            scanProcessingCts.Cancel();
-
-            // wait for termination
-            while (this.scanProcessingThreads.Any(x => x.IsAlive))
-            {
-                Thread.Sleep(1);
-            } 
-
-            this.scanProcessingThreads.Clear();
-            this.rxScanBuffer.Clear();
-
-            // throwaway stuff in the RX buffer!
-            Thread.Sleep(1);
-            serialPort.DiscardInBuffer();
-
-            // send a second DX command
-            serialPort.Write(cmd.Command, 0, cmd.Command.Length);
-
-            // throwaway stuff in the RX buffer!
-            Thread.Sleep(1);
-            serialPort.DiscardInBuffer();
-
-            
-            this._isScanning = false;
+            this.Info.SerialNumber = ivCommand.SerialNumber.ToString();
+            this.Info.Protocol = ivCommand.ProtocolVersion.Value.ToString();
+            this.Info.FirmwareVersion = ivCommand.FirmwareVersion.ToString();
+            this.Info.HardwareVersion = ivCommand.HardwareVersion.ToString();
+            this.Info.Model = ivCommand.Model;
         }
 
-        public async override Task StopScanAsync()
-        {
-            // send a stop command to sweep
-            var cmd = new StopDataAcquisitionCommand();
-            var cmdBytes = cmd.Command.Select(x => (byte)x).ToArray();
-            await serialPort.WriteAsync(cmdBytes, 0, cmdBytes.Length);
-
-            // stop the threads
-            scanProcessingCts.Cancel();
-
-            // wait for termination
-            while (this.scanProcessingThreads.Any(x => x.IsAlive))
-            {
-                await Task.Delay(1);
-            }
-
-            this.scanProcessingThreads.Clear();
-            this.rxScanBuffer.Clear();
-
-            await Task.Delay(1);
-            serialPort.DiscardInBuffer();
-
-            // send a second DX command
-            await serialPort.WriteAsync(cmdBytes, 0, cmdBytes.Length);
-
-            // throwaway stuff in the RX buffer!
-            Thread.Sleep(1);
-            serialPort.DiscardInBuffer();
-
-            this._isScanning = false;
-        }
-
-        #region Sweep specific interface
-
-        public void SetMotorSpeed(SweepMotorSpeed targetSpeed)
-        {
-            if (this.Info.MotorSpeed == targetSpeed)
-                return;
-
-            _semaphoreConfigurationChanges.Wait();
-
-            bool restartScanning = _isScanning;
-
-            if (_isScanning)
-            {
-                StopScan();
-
-                // give sweep some time to recover
-                Thread.Sleep(250);
-            }
-
-            var cmd = new AdjustMotorSpeedCommand(targetSpeed);
-            SimpleCommandTxRx(cmd);
-
-            if (cmd.Status == AdjustMotorSpeedResult.Success)
-            {
-                WaitForStabilizedMotorSpeed(TimeSpan.FromSeconds(30));
-                this.Info.MotorSpeed = targetSpeed;
-            }
-            else
-            {
-                throw new SweepProtocolErrorException($"Adjust motor speed command failed with status {cmd.Status}", null);
-            }
-
-            if(restartScanning)
-            {
-                StartScan();
-            }
-
-            _semaphoreConfigurationChanges.Release();
-
-        }
-
-        public void SetSampleRate(SweepSampleRate targetRate)
-        {
-            _semaphoreConfigurationChanges.Wait();
-
-            bool restartScanning = _isScanning;
-
-            if (_isScanning)
-            {
-                StopScan();
-
-                // give sweep some time to recover
-                Thread.Sleep(250);
-            }
-
-            var cmd = new AdjustSampleRateCommand(targetRate);
-            SimpleCommandTxRx(cmd);
-
-            if(cmd.Status == AdjustSampleRateResult.Success)
-            {
-                this.Info.SampleRate = targetRate;
-            }
-            else
-            {
-
-
-            }
-
-            if (restartScanning)
-            {
-                StartScan();
-            }
-
-            _semaphoreConfigurationChanges.Release();
-        }
-
-        #endregion
-
-        #region Helpers
         /// <summary>
         /// Wait until motor speed is stabilized
         /// </summary>

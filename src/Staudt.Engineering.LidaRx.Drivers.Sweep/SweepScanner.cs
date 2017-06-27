@@ -513,7 +513,7 @@ namespace Staudt.Engineering.LidaRx.Drivers.Sweep
         /// <param name="timeout"></param>
         /// <param name="throwOnFail">Throw an exception on failure instead of just returning false</param>
         /// <returns>True on success</returns>
-        bool WaitForStabilizedMotorSpeed(TimeSpan timeout, bool throwOnFail = true)
+        public bool WaitForStabilizedMotorSpeed(TimeSpan timeout, bool throwOnFail = true)
         {
             var mrCommand = new MotorReadyCommand();
             var limit = DateTime.Now + timeout;
@@ -546,7 +546,7 @@ namespace Staudt.Engineering.LidaRx.Drivers.Sweep
         /// <param name="timeout"></param>
         /// <param name="throwOnFail">Throw an exception on failure instead of just returning false</param>
         /// <returns>True on success</returns>
-        async Task<bool> WaitForStabilizedMotorSpeedAsync(TimeSpan timeout, bool throwOnFail = true)
+        public async Task<bool> WaitForStabilizedMotorSpeedAsync(TimeSpan timeout, bool throwOnFail = true)
         {
             var mrCommand = new MotorReadyCommand();
             var limit = DateTime.Now + timeout;

@@ -18,7 +18,7 @@ namespace Staudt.Engineering.LidaRx.SandboxApp
             using (var sweep = new SweepScanner("COM3"))
             {
                 sweep.Connect();
-                sweep.SetMotorSpeed(SweepMotorSpeed.Speed1Hz);
+                sweep.SetMotorSpeed(SweepMotorSpeed.Speed10Hz);
                 sweep.SetSampleRate(SweepSampleRate.SampleRate1000);
 
                 sweep.OfType<LidarErrorEvent>().Subscribe(x => Console.WriteLine("Error {0}", x.Msg));
@@ -58,7 +58,7 @@ namespace Staudt.Engineering.LidaRx.SandboxApp
                     //.Average(x => x.Distance)
                     .Subscribe(x =>
                     {
-                        //Console.WriteLine($"Distance: {x.Average(y => y.Distance)} / scans {String.Join(", ", x.Select(y => y.Scan).Distinct())} / points {x.Count}");
+                        Console.WriteLine($"Distance: {x.Points.Average(y => y.Distance)}  / points {x.Count}");
 
                     });
 

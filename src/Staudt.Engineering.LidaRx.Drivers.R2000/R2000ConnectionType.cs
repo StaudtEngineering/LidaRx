@@ -19,18 +19,14 @@
 //
 #endregion
 
-namespace Staudt.Engineering.LidaRx.Drivers.R2000.Serialization
+namespace Staudt.Engineering.LidaRx.Drivers.R2000
 {
     /// <summary>
-    /// Dto for list_parameters
-    /// 
-    /// Url:
-    /// http://*sensor IP address*/cmd/list_parameters
+    /// The type of the connection for the data transfers
     /// </summary>
-    class ParameterList
+    public enum R2000ConnectionType
     {
-        public string[] Parameters { get; set; }
-        public R2000ErrorCode ErrorCode { get; set; }
-        public string ErrorText { get; set; }
+        TCPConnection,
+        UDPConnection
     }
 }

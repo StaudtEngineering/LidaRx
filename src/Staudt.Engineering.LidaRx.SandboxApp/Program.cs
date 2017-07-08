@@ -8,12 +8,26 @@ using System.Threading.Tasks;
 using System.Reactive.Linq;
 using System.Reactive;
 using System.Reactive.Subjects;
+using Staudt.Engineering.LidaRx.Drivers.R2000;
+using System.Net;
 
 namespace Staudt.Engineering.LidaRx.SandboxApp
 {
     class Program
     {
         static void Main(string[] args)
+        {
+            //SweepTest();
+
+            using (var r2000 = new R2000Scanner(IPAddress.Parse("192.168.1.214"), R2000ConnectionType.TCPConnection))
+            {
+                r2000.Connect();
+            }
+
+
+        }
+
+        private static void SweepTest()
         {
             using (var sweep = new SweepScanner("COM3"))
             {
@@ -62,49 +76,48 @@ namespace Staudt.Engineering.LidaRx.SandboxApp
 
                     });
 
-                    /*
-                    .SelectMany(x => x.Last().ToList())
-                    .Subscribe(scan =>
-                    {
-                        Console.WriteLine($"Got something in the range / points: {scan.Count} / average distance: {scan.Average(p => p.Distance)}!");
+                /*
+                .SelectMany(x => x.Last().ToList())
+                .Subscribe(scan =>
+                {
+                    Console.WriteLine($"Got something in the range / points: {scan.Count} / average distance: {scan.Average(p => p.Distance)}!");
 
-                        //scan.Buffer(TimeSpan.FromMilliseconds(100)).Where(x => x.Count > 2)
-                    },
-                    onCompleted: () => { },
-                    onError: ex =>
-                    {
-                        // blub 
-                    });//*/
+                    //scan.Buffer(TimeSpan.FromMilliseconds(100)).Where(x => x.Count > 2)
+                },
+                onCompleted: () => { },
+                onError: ex =>
+                {
+                    // blub 
+                });//*/
 
-                    /*
-                    .Where(x => x.Count() > 2)
-                    //.TimeInterval()
-                    //.Where(x => x.Interval.Milliseconds < 500)                    
-                    .Subscribe(_ =>
-                    {
-                        //_
+                /*
+                .Where(x => x.Count() > 2)
+                //.TimeInterval()
+                //.Where(x => x.Interval.Milliseconds < 500)                    
+                .Subscribe(_ =>
+                {
+                    //_
 
-                        //_.Su
+                    //_.Su
 
-                        Console.WriteLine("Got something in the range!");
-                    });
+                    Console.WriteLine("Got something in the range!");
+                });
 
-    */
+*/
                 sweep.StartScan();
 
-                while(sweep.IsScanning)
+                while (sweep.IsScanning)
                 {
-                if (Console.ReadLine() != null)
-                    break;
+                    if (Console.ReadLine() != null)
+                        break;
                 }
                 //ObservableExtensions.Subscribe(sweep, ;
 
-                if(sweep.IsScanning)
+                if (sweep.IsScanning)
                 {
                     sweep.StopScan();
                 }
-            }           
-
+            }
         }
     }
 }

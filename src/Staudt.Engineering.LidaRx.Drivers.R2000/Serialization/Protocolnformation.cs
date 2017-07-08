@@ -19,6 +19,8 @@
 //
 #endregion
 
+using Newtonsoft.Json;
+
 namespace Staudt.Engineering.LidaRx.Drivers.R2000.Serialization
 {
     /// <summary>
@@ -29,9 +31,22 @@ namespace Staudt.Engineering.LidaRx.Drivers.R2000.Serialization
     /// </summary>
     class Protocolnformation
     {
+        [JsonProperty(PropertyName = "protocol_name")]
         public string ProtocolName { get; set; }
+
+        [JsonProperty(PropertyName = "version_major")]
         public uint VersionMajor { get; set; }
+
+        [JsonProperty(PropertyName = "version_minor")]
         public uint VersionMinor { get; set; }
-        public string AvailableCommands { get; set; }
+
+        [JsonProperty(PropertyName = "commands")]
+        public string[] AvailableCommands { get; set; }
+
+        [JsonProperty(PropertyName = "error_code")]
+        public R2000ErrorCode ErrorCode { get; set; }
+
+        [JsonProperty(PropertyName = "error_text")]
+        public string ErrorText { get; set; }
     }
 }

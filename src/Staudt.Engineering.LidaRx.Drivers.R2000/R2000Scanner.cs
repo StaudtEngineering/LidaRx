@@ -19,8 +19,12 @@
 //
 #endregion
 
+using Staudt.Engineering.LidaRx.Drivers.R2000.Helpers;
+using Staudt.Engineering.LidaRx.Drivers.R2000.Serialization;
 using System;
+using System.Collections.Generic;
 using System.Net;
+using System.Net.Http;
 using System.Threading.Tasks;
 
 namespace Staudt.Engineering.LidaRx.Drivers.R2000
@@ -33,16 +37,20 @@ namespace Staudt.Engineering.LidaRx.Drivers.R2000
         bool isScanning = false;
         public override bool IsScanning => this.isScanning;
 
-        public R2000Scanner(string address, R2000ConnectionType connectionType)
+        private HttpClient commandClient;
+
+        public R2000Scanner(IPAddress address, R2000ConnectionType connectionType)
         {
-            var ipv4 = IPAddress.Parse(address);
-
-
+            // retrieve basic info
+            commandClient = new HttpClient();
+            commandClient.BaseAddress = new Uri($"http://{address.ToString()}/cmd/");
         }
 
         public override void Connect()
         {
-            throw new NotImplementedException();
+            var r = commandClient.GetAsAsync<Protocolnformation>("get_protocol_info").Result;           
+            
+           
         }
 
         public override Task ConnectAsync()

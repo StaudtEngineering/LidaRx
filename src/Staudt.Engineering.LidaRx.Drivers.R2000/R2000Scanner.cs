@@ -23,7 +23,7 @@ using Newtonsoft.Json;
 using Staudt.Engineering.LidaRx.Drivers.R2000.Helpers;
 using Staudt.Engineering.LidaRx.Drivers.R2000.Serialization;
 using System;
-using System.Collections.Generic;
+using System.Linq;
 using System.Linq.Expressions;
 using System.Net;
 using System.Net.Http;
@@ -132,22 +132,7 @@ namespace Staudt.Engineering.LidaRx.Drivers.R2000
         /// <param name="frequencyHz">Refer  to the vendor's manual for the acceptable range</param>
         public void SetScanFrequency(double frequencyHz)
         {
-            if (!Connected)
-                throw new LidaRxStateException("This instance is not yet connected to the R2000 scanner.");
-
-            // on recent devices we can check the configurable frequency range!
-            if (this.instanceProtocolVersion >= R2000ProtocolVersion.v101)
-            {
-                if (frequencyHz < SensorCapabilities.ScanFrequencyMin || frequencyHz > SensorCapabilities.ScanFrequencyMax)
-                    throw new ArgumentOutOfRangeException(
-                        "frequencyHz",
-                        $"Acceptable range is [{SensorCapabilities.ScanFrequencyMin}, {SensorCapabilities.ScanFrequencyMax}]");
-            }
-
-            SetConfigParameter<MeasuringConfigurationInformation, double>(x => x.ScanFrequency, frequencyHz).Wait();
-
-            // when it didn't fail...
-            this.MeasurementConfiguration.ScanFrequency = frequencyHz;
+            SetScanFrequencyAsync(frequencyHz).Wait();
         }
 
         /// <summary>
@@ -169,15 +154,82 @@ namespace Staudt.Engineering.LidaRx.Drivers.R2000
                         $"Acceptable range is [{SensorCapabilities.ScanFrequencyMin}, {SensorCapabilities.ScanFrequencyMax}]");
             }
 
+
             await SetConfigParameter<MeasuringConfigurationInformation, double>(x => x.ScanFrequency, frequencyHz);
 
             // when it didn't fail...
             this.MeasurementConfiguration.ScanFrequency = frequencyHz;
         }
 
+        /// <summary>
+        /// Set the sampling rate
+        /// </summary>
+        /// <param name="targetSamplingRate">Target rate or AutoMaximum</param>
+        public void SetSamplingRate(R2000SamplingRate targetSamplingRate)
+        {
+            SetSamplingRateAsync(targetSamplingRate).Wait();
+        }
+
+        /// <summary>
+        /// Set the sampling rate
+        /// </summary>
+        /// <param name="targetSamplingRate">Target rate or AutoMaximum</param>
         public async Task SetSamplingRateAsync(R2000SamplingRate targetSamplingRate)
         {
+            if (!Connected)
+                throw new LidaRxStateException("This instance is not yet connected to the R2000 scanner.");
 
+            // on recent devices we can check the configurable sample rate range!
+            if (this.instanceProtocolVersion >= R2000ProtocolVersion.v101 
+                && targetSamplingRate != R2000SamplingRate.AutomaticMaximum)
+            {
+                var targetAsInt = (uint)targetSamplingRate;
+
+                if (targetAsInt < SensorCapabilities.SamplingRateMin || targetAsInt > SensorCapabilities.SamplingRateMax)
+                    throw new ArgumentOutOfRangeException(
+                        "targetSamplingRate",
+                        $"Acceptable range is [{SensorCapabilities.SamplingRateMin}, {SensorCapabilities.SamplingRateMax}]");
+            }
+
+            uint targetSamplesPerScan = 0;
+
+            // select the max sr automatically if the user asks for it ;)
+            if (targetSamplingRate == R2000SamplingRate.AutomaticMaximum)
+            {
+                var currentDeviceFamily = this.SensorInformation.DeviceFamilly;
+                var currentScanFrequency = this.MeasurementConfiguration.ScanFrequency;
+
+                targetSamplesPerScan = SamplingRateSetting.Table
+                    .Where(x => x.DeviceFamily == currentDeviceFamily)
+                    .Where(x => x.MaximumScanFrequency <= currentScanFrequency)
+                    .Select(x => x.SamplesPerScan)
+                    .Max();
+            }
+            // if the user specified a sample rate, then check if it's in range
+            // given the current scan frequency configuration
+            else
+            {
+                var currentDeviceFamily = this.SensorInformation.DeviceFamilly;
+                var currentScanFrequency = this.MeasurementConfiguration.ScanFrequency;
+
+                targetSamplesPerScan = SamplingRateSetting.Table
+                    .Where(x => x.DeviceFamily == currentDeviceFamily)
+                    .Where(x => x.MaximumScanFrequency >= currentScanFrequency)
+                    .Where(x => x.MaximumSampleRate == targetSamplingRate)
+                    .Select(x => x.SamplesPerScan)
+                    .Max();
+            }
+
+            if (targetSamplesPerScan == 0)
+                throw new ArgumentException("targetSamplingRate", 
+                    "There's no valid configuration for your device and the chosen target sample rate. " 
+                    + "Please check for valid configurations in the R2000 manual");
+
+            // write the config to the R2000
+            await SetConfigParameter<MeasuringConfigurationInformation, uint>(x => x.SamplesPerScan, targetSamplesPerScan);
+
+            // reflect the value in the local config
+            this.MeasurementConfiguration.SamplesPerScan = targetSamplesPerScan;
         }
 
         #endregion

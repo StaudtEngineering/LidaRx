@@ -175,7 +175,13 @@ namespace Staudt.Engineering.LidaRx.Drivers.R2000
             this.MeasurementConfiguration.ScanFrequency = frequencyHz;
         }
 
+        public async Task SetSamplingRateAsync(R2000SamplingRate targetSamplingRate)
+        {
+
+        }
+
         #endregion
+
 
         #region Helpers
 
@@ -242,7 +248,7 @@ namespace Staudt.Engineering.LidaRx.Drivers.R2000
             var result = await commandClient.GetAsAsync<SetParameterResult>(request);
 
             if (result.ErrorCode != R2000ErrorCode.Success)
-                throw new Exception($"Could not set parameter {name} to value '{paramEncoded}' because '{result.ErrorText}'");
+                throw new Exception($"Could not set parameter {name} to value '{paramEncoded}' because {result.ErrorText}");
         }
 
         #endregion

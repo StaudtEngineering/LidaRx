@@ -148,14 +148,18 @@ namespace Staudt.Engineering.LidaRx.Drivers.R2000
                 {
                     // fetch and publish the status
                     var status = await FetchConfigObject<R2000Status>();
-                    this.MeasurementConfiguration.CurrentScanFrequency = status.CurrentScanFrequency;
-                    PublishLidarEvent(status);
+
+                    if (status.ErrorCode == R2000ErrorCode.Success)
+                    {
+                        this.MeasurementConfiguration.CurrentScanFrequency = status.CurrentScanFrequency;
+                        PublishLidarEvent(status);
+                    }
 
                     await Task.Delay(fetchStatusInterval);
                 }
                 catch
                 {
-
+                    // TODO: log failures
                 }
             }
 

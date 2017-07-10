@@ -48,20 +48,21 @@ namespace Staudt.Engineering.LidaRx.Drivers.R2000
 
         public override void Connect()
         {
-            var r = commandClient.GetAsAsync<Protocolnformation>("get_protocol_info").Result;
+            var r = commandClient.GetAsAsync<ProtocolInformation>("get_protocol_info").Result;
+            var protocolVersion = r.GetProtocolVersion();
 
 
-            var basicInfoParameters = typeof(BasicSensorInformation).GetR2000ParametersList();
+            var basicInfoParameters = typeof(BasicSensorInformation).GetR2000ParametersList(protocolVersion);
             var bsi = commandClient.GetAsAsync<BasicSensorInformation>($"get_parameter?list={String.Join(";", basicInfoParameters)}").Result;
 
 
-            var sensorCapParameter = typeof(SensorCapabilitiesInformation).GetR2000ParametersList();
+            var sensorCapParameter = typeof(SensorCapabilitiesInformation).GetR2000ParametersList(protocolVersion);
             var scap = commandClient.GetAsAsync<SensorCapabilitiesInformation>($"get_parameter?list={String.Join(";", sensorCapParameter)}").Result;
 
-            var ethernetConfParams = typeof(EthernetConfigurationInformation).GetR2000ParametersList();
+            var ethernetConfParams = typeof(EthernetConfigurationInformation).GetR2000ParametersList(protocolVersion);
             var ethConf = commandClient.GetAsAsync<EthernetConfigurationInformation>($"get_parameter?list={String.Join(";", ethernetConfParams)}").Result;
 
-            var measureConfParam = typeof(MeasuringConfigurationInformation).GetR2000ParametersList();
+            var measureConfParam = typeof(MeasuringConfigurationInformation).GetR2000ParametersList(protocolVersion);
             var mesConf = commandClient.GetAsAsync<MeasuringConfigurationInformation>($"get_parameter?list={String.Join(";", measureConfParam)}").Result;
 
         }

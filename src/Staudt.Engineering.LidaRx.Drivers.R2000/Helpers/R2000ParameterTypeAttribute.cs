@@ -2,6 +2,7 @@
 using System.Reflection;
 using System.Linq;
 using Newtonsoft.Json;
+using Staudt.Engineering.LidaRx.Drivers.R2000.Serialization;
 
 namespace Staudt.Engineering.LidaRx.Drivers.R2000.Helpers
 {
@@ -22,13 +23,16 @@ namespace Staudt.Engineering.LidaRx.Drivers.R2000.Helpers
         /// </summary>
         public R2000ProtocolVersion MaxProtocolVersion { get; private set; }
 
-        public R2000ParameterInfoAttribute(R2000ParameterType parameterAccessQualifier)
-        {
-            this.AccessType = parameterAccessQualifier;
-            this.MinProtocolVersion = R2000ProtocolVersion.Any;
-            this.MaxProtocolVersion = R2000ProtocolVersion.Any;
-        }
 
+        public R2000ParameterInfoAttribute(
+            R2000ParameterType parameterAccessType,
+            R2000ProtocolVersion minVersion = R2000ProtocolVersion.Any, 
+            R2000ProtocolVersion maxVersion = R2000ProtocolVersion.Any)
+        {
+            this.AccessType = parameterAccessType;
+            this.MinProtocolVersion = minVersion;
+            this.MaxProtocolVersion = maxVersion;
+        }
     }
 
     [Flags]
@@ -64,7 +68,7 @@ namespace Staudt.Engineering.LidaRx.Drivers.R2000.Helpers
         v102 = 102,
 
         /// <summary>
-        /// All/Any protocol version
+        /// Any protocol version
         /// </summary>
         Any
     }
@@ -76,15 +80,25 @@ namespace Staudt.Engineering.LidaRx.Drivers.R2000.Helpers
         /// </summary>
         /// <param name="type"></param>
         /// <returns></returns>
-        public static string[] GetR2000ParametersList(this Type type, R2000ParameterType parameterTypes = R2000ParameterType.All)
+        public static string[] GetR2000ParametersList(
+            this Type type,
+            R2000ProtocolVersion protocolVersion,
+            R2000ParameterType accessorTypes = R2000ParameterType.All)
         {
             var fieldNames = type.GetRuntimeProperties()
-                // get only fields where we find a R2000ParameterTypeAttribute
+                // get only fields where we find a R2000ParameterTypeAttribute with the required filter
                 .Where(field =>
                 {
                     var parameterTypeAttribute = field.GetCustomAttributes<R2000ParameterInfoAttribute>();
 
-                    return parameterTypeAttribute.Any() && parameterTypeAttribute.All(x => parameterTypes.HasFlag(x.AccessType));
+                    if (!parameterTypeAttribute.Any())
+                        return false;
+
+                    var accessorsOk = parameterTypeAttribute.All(x => accessorTypes.HasFlag(x.AccessType));
+                    var minVersionOk = parameterTypeAttribute.All(x => x.MinProtocolVersion == R2000ProtocolVersion.Any || x.MinProtocolVersion <= protocolVersion);
+                    var maxVersionOk = parameterTypeAttribute.All(x => x.MaxProtocolVersion == R2000ProtocolVersion.Any || x.MaxProtocolVersion >= protocolVersion);
+
+                    return accessorsOk && minVersionOk && maxVersionOk;
                 })
                 // select either the JsonProperty.PropertyName or the Fields true name as fallback
                 .Select(field =>
@@ -98,6 +112,17 @@ namespace Staudt.Engineering.LidaRx.Drivers.R2000.Helpers
                 });
 
             return fieldNames.ToArray();
+        }
+
+        /// <summary>
+        /// Convert Major/Minor version info in the ProtocolInformation object to a known R2000ProtocolVersion
+        /// </summary>
+        /// <param name="pi"></param>
+        /// <returns></returns>
+        public static R2000ProtocolVersion GetProtocolVersion(this ProtocolInformation pi)
+        {
+            var asInt = pi.VersionMajor * 100 + pi.VersionMinor;
+            return (R2000ProtocolVersion)asInt;
         }
 
     }

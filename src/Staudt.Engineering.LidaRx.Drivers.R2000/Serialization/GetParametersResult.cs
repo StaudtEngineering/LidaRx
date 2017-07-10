@@ -112,21 +112,21 @@ namespace Staudt.Engineering.LidaRx.Drivers.R2000.Serialization
         [JsonProperty(PropertyName = "angular_resolution")]
         public double AngularResulution { get; set; }
 
-        //[R2000ParameterType(R2000ParameterType.ReadOnlyStatic)]
-        //[JsonProperty(PropertyName = "scan_frequency_min")]
-        //public uint ScanFrequencyMin { get; set; }
+        [R2000ParameterInfo(R2000ParameterType.ReadOnlyStatic, minVersion: R2000ProtocolVersion.v101)]
+        [JsonProperty(PropertyName = "scan_frequency_min")]
+        public uint ScanFrequencyMin { get; set; }
 
-        //[R2000ParameterType(R2000ParameterType.ReadOnlyStatic)]
-        //[JsonProperty(PropertyName = "scan_frequency_max")]
-        //public uint ScanFrequencyMax { get; set; }
+        [R2000ParameterInfo(R2000ParameterType.ReadOnlyStatic, minVersion: R2000ProtocolVersion.v101)]
+        [JsonProperty(PropertyName = "scan_frequency_max")]
+        public uint ScanFrequencyMax { get; set; }
 
-        //[R2000ParameterType(R2000ParameterType.ReadOnlyStatic)]
-        //[JsonProperty(PropertyName = "sampling_rate_min")]
-        //public uint SamplingRateMin { get; set; }
+        [R2000ParameterInfo(R2000ParameterType.ReadOnlyStatic, minVersion: R2000ProtocolVersion.v101)]
+        [JsonProperty(PropertyName = "sampling_rate_min")]
+        public uint SamplingRateMin { get; set; }
 
-        //[R2000ParameterType(R2000ParameterType.ReadOnlyStatic)]
-        //[JsonProperty(PropertyName = "sampling_rate_max")]
-        //public uint SamplingRateMax { get; set; }
+        [R2000ParameterInfo(R2000ParameterType.ReadOnlyStatic, minVersion: R2000ProtocolVersion.v101)]
+        [JsonProperty(PropertyName = "sampling_rate_max")]
+        public uint SamplingRateMax { get; set; }
 
         [R2000ParameterInfo(R2000ParameterType.ReadOnlyStatic)]
         [JsonProperty(PropertyName = "max_connections")]
@@ -215,9 +215,9 @@ namespace Staudt.Engineering.LidaRx.Drivers.R2000.Serialization
 
     class MeasuringConfigurationInformation
     {
-        //[R2000ParameterType(R2000ParameterType.Volatile)]
-        //[JsonProperty(PropertyName = "operating_mode")]
-        //public R2000OperationMode OperationMode { get; set; }
+        [R2000ParameterInfo(R2000ParameterType.Volatile, minVersion: R2000ProtocolVersion.v102)]
+        [JsonProperty(PropertyName = "operating_mode")]
+        public R2000OperationMode OperationMode { get; set; }
 
         [R2000ParameterInfo(R2000ParameterType.ReadWrite)]
         [JsonProperty(PropertyName = "scan_frequency")]

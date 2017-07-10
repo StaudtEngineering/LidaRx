@@ -29,7 +29,7 @@ namespace Staudt.Engineering.LidaRx.Drivers.R2000.Serialization
     /// Url:
     /// http://*sensor IP address*/cmd/get_protocol_info
     /// </summary>
-    class Protocolnformation
+    class ProtocolInformation
     {
         [JsonProperty(PropertyName = "protocol_name")]
         public string ProtocolName { get; set; }

@@ -19,12 +19,15 @@
 //
 #endregion
 
+using Newtonsoft.Json;
 using Staudt.Engineering.LidaRx.Drivers.R2000.Helpers;
 using Staudt.Engineering.LidaRx.Drivers.R2000.Serialization;
 using System;
 using System.Collections.Generic;
+using System.Linq.Expressions;
 using System.Net;
 using System.Net.Http;
+using System.Reflection;
 using System.Threading.Tasks;
 
 namespace Staudt.Engineering.LidaRx.Drivers.R2000
@@ -121,6 +124,59 @@ namespace Staudt.Engineering.LidaRx.Drivers.R2000
             throw new NotImplementedException();
         }
 
+        #region Configuration API
+
+        /// <summary>
+        /// Set the scan frequency
+        /// </summary>
+        /// <param name="frequencyHz">Refer  to the vendor's manual for the acceptable range</param>
+        public void SetScanFrequency(double frequencyHz)
+        {
+            if (!Connected)
+                throw new LidaRxStateException("This instance is not yet connected to the R2000 scanner.");
+
+            // on recent devices we can check the configurable frequency range!
+            if (this.instanceProtocolVersion >= R2000ProtocolVersion.v101)
+            {
+                if (frequencyHz < SensorCapabilities.ScanFrequencyMin || frequencyHz > SensorCapabilities.ScanFrequencyMax)
+                    throw new ArgumentOutOfRangeException(
+                        "frequencyHz",
+                        $"Acceptable range is [{SensorCapabilities.ScanFrequencyMin}, {SensorCapabilities.ScanFrequencyMax}]");
+            }
+
+            SetConfigParameter<MeasuringConfigurationInformation, double>(x => x.ScanFrequency, frequencyHz).Wait();
+
+            // when it didn't fail...
+            this.MeasurementConfiguration.ScanFrequency = frequencyHz;
+        }
+
+        /// <summary>
+        /// Set the scan frequency
+        /// </summary>
+        /// <param name="frequencyHz">Refer  to the vendor's manual for the acceptable range</param>
+        /// <returns></returns>
+        public async Task SetScanFrequencyAsync(double frequencyHz)
+        {
+            if (!Connected)
+                throw new LidaRxStateException("This instance is not yet connected to the R2000 scanner.");
+
+            // on recent devices we can check the configurable frequency range!
+            if (this.instanceProtocolVersion >= R2000ProtocolVersion.v101)
+            {
+                if (frequencyHz < SensorCapabilities.ScanFrequencyMin || frequencyHz > SensorCapabilities.ScanFrequencyMax)
+                    throw new ArgumentOutOfRangeException(
+                        "frequencyHz",
+                        $"Acceptable range is [{SensorCapabilities.ScanFrequencyMin}, {SensorCapabilities.ScanFrequencyMax}]");
+            }
+
+            await SetConfigParameter<MeasuringConfigurationInformation, double>(x => x.ScanFrequency, frequencyHz);
+
+            // when it didn't fail...
+            this.MeasurementConfiguration.ScanFrequency = frequencyHz;
+        }
+
+        #endregion
+
         #region Helpers
 
         /// <summary>
@@ -134,6 +190,59 @@ namespace Staudt.Engineering.LidaRx.Drivers.R2000
         {
             var parameters = typeof(T).GetR2000ParametersList(this.instanceProtocolVersion);
             return await commandClient.GetAsAsync<T>($"get_parameter?list={String.Join(";", parameters)}");
+        }
+
+        /// <summary>
+        /// Set a configuration parameter to a value
+        /// </summary>
+        /// <typeparam name="TObj"></typeparam>
+        /// <typeparam name="TParam"></typeparam>
+        /// <param name="selector">Select the property on one of the config objects</param>
+        /// <param name="value">Target value</param>
+        /// <returns></returns>
+        private async Task SetConfigParameter<TObj, TParam>(Expression<Func<TObj,TParam>> selector, TParam value)
+        {
+            
+            Type type = typeof(TObj);
+
+            MemberExpression member = selector.Body as MemberExpression;
+            if (member == null)
+                throw new ArgumentException(string.Format(
+                    "Expression '{0}' refers to a method, not a property.",
+                    selector.ToString()));
+
+            PropertyInfo propInfo = member.Member as PropertyInfo;
+            if (propInfo == null)
+                throw new ArgumentException(string.Format(
+                    "Expression '{0}' refers to a field, not a property.",
+                    selector.ToString()));
+
+            var name = propInfo.Name;
+            var jsonAttribute = propInfo.GetCustomAttribute<JsonPropertyAttribute>();
+            var r2000InfoAttr = propInfo.GetCustomAttribute<R2000ParameterInfoAttribute>();
+
+            if (jsonAttribute == null || r2000InfoAttr == null)
+                throw new ArgumentException("The chosen property is not correctly annotated (JsonPropertyAttribute or R2000ParameterInfoAttribute missing)");
+
+            if (r2000InfoAttr.AccessType == R2000ParameterType.ReadOnlyStatic || r2000InfoAttr.AccessType == R2000ParameterType.ReadOnly)
+                throw new ArgumentException("The chosen property is read only");
+
+            {
+                var minVersionOk = r2000InfoAttr.MinProtocolVersion == R2000ProtocolVersion.Any || r2000InfoAttr.MinProtocolVersion <= this.instanceProtocolVersion;
+                var maxVersionOk = r2000InfoAttr.MaxProtocolVersion == R2000ProtocolVersion.Any || r2000InfoAttr.MaxProtocolVersion >= this.instanceProtocolVersion;
+
+                if (!minVersionOk || !maxVersionOk)
+                    throw new ArgumentException($"This parameter is not supported on this devices firmware version (min: {r2000InfoAttr.MinProtocolVersion} / max: {r2000InfoAttr.MaxProtocolVersion})");
+            }
+
+            // build the url
+            var paramEncoded = System.Net.WebUtility.UrlEncode(value.ToString());
+            var request = $"set_parameter?{jsonAttribute.PropertyName}={paramEncoded}";
+
+            var result = await commandClient.GetAsAsync<SetParameterResult>(request);
+
+            if (result.ErrorCode != R2000ErrorCode.Success)
+                throw new Exception($"Could not set parameter {name} to value '{paramEncoded}' because '{result.ErrorText}'");
         }
 
         #endregion

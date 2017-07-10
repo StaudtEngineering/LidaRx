@@ -22,6 +22,8 @@ namespace Staudt.Engineering.LidaRx.SandboxApp
             using (var r2000 = new R2000Scanner(IPAddress.Parse("192.168.1.214"), R2000ConnectionType.TCPConnection))
             {
                 r2000.Connect();
+
+                r2000.SetScanFrequency(30);
             }
 
 

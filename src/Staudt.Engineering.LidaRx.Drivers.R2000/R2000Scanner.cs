@@ -37,7 +37,16 @@ namespace Staudt.Engineering.LidaRx.Drivers.R2000
         bool isScanning = false;
         public override bool IsScanning => this.isScanning;
 
+        /// <summary>
+        /// Note: use single HttpClient as it perfectly handles concurrent access
+        /// </summary>
         private HttpClient commandClient;
+
+        private BasicSensorInformation SensorInformation;
+        private SensorCapabilitiesInformation SensorCapabilities;
+        private EthernetConfigurationInformation EthernetConfiguration;
+        private MeasuringConfigurationInformation MeasurementConfiguration;
+
 
         public R2000Scanner(IPAddress address, R2000ConnectionType connectionType)
         {
@@ -48,28 +57,24 @@ namespace Staudt.Engineering.LidaRx.Drivers.R2000
 
         public override void Connect()
         {
-            var r = commandClient.GetAsAsync<ProtocolInformation>("get_protocol_info").Result;
-            var protocolVersion = r.GetProtocolVersion();
+            var protocolInfo = commandClient.GetAsAsync<ProtocolInformation>("get_protocol_info").Result;
+            var protocolVersion = protocolInfo.GetProtocolVersion();
 
-
-            var basicInfoParameters = typeof(BasicSensorInformation).GetR2000ParametersList(protocolVersion);
-            var bsi = commandClient.GetAsAsync<BasicSensorInformation>($"get_parameter?list={String.Join(";", basicInfoParameters)}").Result;
-
-
-            var sensorCapParameter = typeof(SensorCapabilitiesInformation).GetR2000ParametersList(protocolVersion);
-            var scap = commandClient.GetAsAsync<SensorCapabilitiesInformation>($"get_parameter?list={String.Join(";", sensorCapParameter)}").Result;
-
-            var ethernetConfParams = typeof(EthernetConfigurationInformation).GetR2000ParametersList(protocolVersion);
-            var ethConf = commandClient.GetAsAsync<EthernetConfigurationInformation>($"get_parameter?list={String.Join(";", ethernetConfParams)}").Result;
-
-            var measureConfParam = typeof(MeasuringConfigurationInformation).GetR2000ParametersList(protocolVersion);
-            var mesConf = commandClient.GetAsAsync<MeasuringConfigurationInformation>($"get_parameter?list={String.Join(";", measureConfParam)}").Result;
-
+            this.SensorInformation = FetchConfigObject<BasicSensorInformation>(protocolVersion).Result;
+            this.SensorCapabilities = FetchConfigObject<SensorCapabilitiesInformation>(protocolVersion).Result;
+            this.EthernetConfiguration = FetchConfigObject<EthernetConfigurationInformation>(protocolVersion).Result;
+            this.MeasurementConfiguration = FetchConfigObject<MeasuringConfigurationInformation>(protocolVersion).Result;
         }
 
-        public override Task ConnectAsync()
+        public override async Task ConnectAsync()
         {
-            throw new NotImplementedException();
+            var protocolInfo = await commandClient.GetAsAsync<ProtocolInformation>("get_protocol_info");
+            var protocolVersion = protocolInfo.GetProtocolVersion();
+
+            this.SensorInformation = await FetchConfigObject<BasicSensorInformation>(protocolVersion);
+            this.SensorCapabilities = await FetchConfigObject<SensorCapabilitiesInformation>(protocolVersion);
+            this.EthernetConfiguration = await FetchConfigObject<EthernetConfigurationInformation>(protocolVersion);
+            this.MeasurementConfiguration = await FetchConfigObject<MeasuringConfigurationInformation>(protocolVersion);
         }
 
         public override void Disconnect()
@@ -77,7 +82,7 @@ namespace Staudt.Engineering.LidaRx.Drivers.R2000
             throw new NotImplementedException();
         }
 
-        public override Task DisconnectAsync()
+        public override async Task DisconnectAsync()
         {
             throw new NotImplementedException();
         }
@@ -87,7 +92,7 @@ namespace Staudt.Engineering.LidaRx.Drivers.R2000
             throw new NotImplementedException();
         }
 
-        public override Task StartScanAsync()
+        public override async Task StartScanAsync()
         {
             throw new NotImplementedException();
         }
@@ -97,9 +102,26 @@ namespace Staudt.Engineering.LidaRx.Drivers.R2000
             throw new NotImplementedException();
         }
 
-        public override Task StopScanAsync()
+        public override async Task StopScanAsync()
         {
             throw new NotImplementedException();
         }
+
+        #region Helpers
+
+        /// <summary>
+        /// Fetch the configuration object from the R2000 (automatically generates the 
+        /// parameters list etc from attributes)
+        /// </summary>
+        /// <typeparam name="T"></typeparam>
+        /// <param name="protocolVersion"></param>
+        /// <returns></returns>
+        private async Task<T> FetchConfigObject<T>(R2000ProtocolVersion protocolVersion)
+        {
+            var parameters = typeof(T).GetR2000ParametersList(protocolVersion);
+            return await commandClient.GetAsAsync<T>($"get_parameter?list={String.Join(";", parameters)}");
+        }
+
+        #endregion
     }
 }

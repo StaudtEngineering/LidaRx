@@ -28,6 +28,7 @@ using System.Linq.Expressions;
 using System.Net;
 using System.Net.Http;
 using System.Reflection;
+using System.Threading;
 using System.Threading.Tasks;
 
 namespace Staudt.Engineering.LidaRx.Drivers.R2000
@@ -39,6 +40,13 @@ namespace Staudt.Engineering.LidaRx.Drivers.R2000
 
         bool isScanning = false;
         public override bool IsScanning => this.isScanning;
+
+        /// <summary>
+        /// On Connect() we start this thread to periodically check for the device's current status
+        /// </summary>
+        readonly int fetchStatusInterval;
+        Thread fetchStatusThread;
+        CancellationTokenSource fetchStatusCts;
 
         /// <summary>
         /// Note: use single HttpClient as it perfectly handles concurrent access
@@ -57,8 +65,10 @@ namespace Staudt.Engineering.LidaRx.Drivers.R2000
         /// </summary>
         /// <param name="address"></param>
         /// <param name="connectionType"></param>
-        public R2000Scanner(IPAddress address, R2000ConnectionType connectionType)
+        public R2000Scanner(IPAddress address, R2000ConnectionType connectionType, int fetchStatusInterval = 10000)
         {
+            this.fetchStatusInterval = fetchStatusInterval;
+
             // retrieve basic info
             commandClient = new HttpClient();
             commandClient.BaseAddress = new Uri($"http://{address.ToString()}/cmd/");
@@ -66,21 +76,15 @@ namespace Staudt.Engineering.LidaRx.Drivers.R2000
 
         public override void Connect()
         {
-            var protocolInfo = commandClient.GetAsAsync<ProtocolInformation>("get_protocol_info").Result;
-            this.instanceProtocolVersion = protocolInfo.GetProtocolVersion();
-
-            this.SensorInformation = FetchConfigObject<BasicSensorInformation>().Result;
-            this.SensorCapabilities = FetchConfigObject<SensorCapabilitiesInformation>().Result;
-            this.EthernetConfiguration = FetchConfigObject<EthernetConfigurationInformation>().Result;
-            this.MeasurementConfiguration = FetchConfigObject<MeasuringConfigurationInformation>().Result;
-
-            // Note: well... yes this is somewhat stupid, but hey(!) we managed to talk with
-            // the R2000, so everything's fine and dandy
-            this.connected = true;
+            ConnectAsync().Wait();
         }
 
         public override async Task ConnectAsync()
         {
+            // don't do this again if we're already connected :O
+            if (Connected)
+                return;
+
             var protocolInfo = await commandClient.GetAsAsync<ProtocolInformation>("get_protocol_info");
             this.instanceProtocolVersion = protocolInfo.GetProtocolVersion();
 
@@ -89,6 +93,11 @@ namespace Staudt.Engineering.LidaRx.Drivers.R2000
             this.EthernetConfiguration = await FetchConfigObject<EthernetConfigurationInformation>();
             this.MeasurementConfiguration = await FetchConfigObject<MeasuringConfigurationInformation>();
 
+            // start the periodical fetching ;)
+            this.fetchStatusCts = new CancellationTokenSource();
+            this.fetchStatusThread = new Thread(ThreadFetchStatusPeriodically);
+            this.fetchStatusThread.Start();
+
             // Note: well... yes this is somewhat stupid, but hey(!) we managed to talk with
             // the R2000, so everything's fine and dandy
             this.connected = true;
@@ -96,12 +105,12 @@ namespace Staudt.Engineering.LidaRx.Drivers.R2000
 
         public override void Disconnect()
         {
-            throw new NotImplementedException();
+            fetchStatusCts.Cancel();
         }
 
         public override async Task DisconnectAsync()
         {
-            throw new NotImplementedException();
+            fetchStatusCts.Cancel();
         }
 
         public override void StartScan()
@@ -123,6 +132,38 @@ namespace Staudt.Engineering.LidaRx.Drivers.R2000
         {
             throw new NotImplementedException();
         }
+
+        #region Fetch status stuff
+        /// <summary>
+        /// Note: This is running in a thread
+        /// </summary>
+        private async void ThreadFetchStatusPeriodically()
+        {
+            while(true)
+            {
+                if (fetchStatusCts.IsCancellationRequested)
+                    break;
+
+                try
+                {
+                    // fetch and publish the status
+                    var status = await FetchConfigObject<R2000Status>();
+                    this.MeasurementConfiguration.CurrentScanFrequency = status.CurrentScanFrequency;
+                    PublishLidarEvent(status);
+
+                    await Task.Delay(fetchStatusInterval);
+                }
+                catch
+                {
+
+                }
+            }
+
+            // not connected any more!
+            this.connected = false;
+        }
+
+        #endregion
 
         #region Configuration API
 
@@ -231,11 +272,21 @@ namespace Staudt.Engineering.LidaRx.Drivers.R2000
             // reflect the value in the local config
             this.MeasurementConfiguration.SamplesPerScan = targetSamplesPerScan;
         }
-
         #endregion
 
-
         #region Helpers
+
+        /// <summary>
+        /// Publish a ILidarEvent
+        /// </summary>
+        /// <param name="ev"></param>
+        void PublishLidarEvent(ILidarEvent ev)
+        {
+            foreach (var observer in base.observers)
+            {
+                observer.OnNext(ev);
+            }
+        }
 
         /// <summary>
         /// Fetch the configuration object from the R2000 (automatically generates the 

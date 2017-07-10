@@ -25,7 +25,26 @@ namespace Staudt.Engineering.LidaRx.SandboxApp
 
                 r2000.SetSamplingRate(R2000SamplingRate._180kHz);
                 r2000.SetScanFrequency(10);
-                
+
+
+                r2000.OfType<R2000Status>().Subscribe(_ =>
+                {
+                    Console.WriteLine($"R2000 status:");
+                    Console.WriteLine($"\tScan Frequency {_.CurrentScanFrequency} Hz");
+                    Console.WriteLine($"\tUptime {_.Uptime} min");
+                    Console.WriteLine($"\tTemperature {_.CurrentTemperature} °C");
+                    Console.WriteLine($"\tSystem load {_.SystemLoad}%");
+                    Console.WriteLine("--------------------------------------------");
+                });
+
+
+                while (true)
+                {
+                    if (Console.ReadLine() != null)
+                        break;
+                }
+
+                r2000.Disconnect();
             }
 
 

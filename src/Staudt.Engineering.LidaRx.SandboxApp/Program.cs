@@ -23,7 +23,7 @@ namespace Staudt.Engineering.LidaRx.SandboxApp
             {
                 r2000.Connect();
 
-                r2000.SetSamplingRate(R2000SamplingRate._180kHz);
+                r2000.SetSamplingRate(R2000SamplingRate._252kHz);
                 r2000.SetScanFrequency(10);
 
 
@@ -36,6 +36,15 @@ namespace Staudt.Engineering.LidaRx.SandboxApp
                     Console.WriteLine($"\tSystem load {_.SystemLoad}%");
                     Console.WriteLine("--------------------------------------------");
                 });
+
+                r2000.OnlyLidarPoints()
+                    .BufferByScan()
+                    .Subscribe(scan =>
+                    {
+                        Console.WriteLine($"Got {scan.Count} points for scan {scan.Scan}");
+                    });
+
+                r2000.StartScan();
 
 
                 while (true)

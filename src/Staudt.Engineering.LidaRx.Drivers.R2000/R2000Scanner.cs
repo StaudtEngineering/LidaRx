@@ -20,6 +20,7 @@
 #endregion
 
 using Newtonsoft.Json;
+using Staudt.Engineering.LidaRx.Drivers.R2000.Connectors;
 using Staudt.Engineering.LidaRx.Drivers.R2000.Helpers;
 using Staudt.Engineering.LidaRx.Drivers.R2000.Serialization;
 using System;
@@ -52,6 +53,8 @@ namespace Staudt.Engineering.LidaRx.Drivers.R2000
         /// Note: use single HttpClient as it perfectly handles concurrent access
         /// </summary>
         private HttpClient commandClient;
+        private IR2000Connector dataStreamConnector;
+
 
         private R2000ProtocolVersion instanceProtocolVersion;
         private BasicSensorInformation SensorInformation;
@@ -72,6 +75,27 @@ namespace Staudt.Engineering.LidaRx.Drivers.R2000
             // retrieve basic info
             commandClient = new HttpClient();
             commandClient.BaseAddress = new Uri($"http://{address.ToString()}/cmd/");
+
+            if(connectionType == R2000ConnectionType.TCPConnection)
+            {
+                this.dataStreamConnector = new TCPConnector(commandClient, address, true, 10000);
+            }
+
+
+            this.dataStreamConnector.Subscribe(pt =>
+            {
+                var carthCoordinate = base.TransfromScannerToSystemCoordinates(pt.Angle, pt.Distance);
+
+                var point = new LidarPoint(
+                    carthCoordinate, 
+                    pt.Angle, 
+                    pt.Distance,
+                    (byte)(pt.Amplitude / 256), 
+                    pt.ScanCounter);
+
+                PublishLidarEvent(point);
+
+            });
         }
 
         public override void Connect()
@@ -115,12 +139,12 @@ namespace Staudt.Engineering.LidaRx.Drivers.R2000
 
         public override void StartScan()
         {
-            throw new NotImplementedException();
+            this.dataStreamConnector.StartAsync().Wait();
         }
 
         public override async Task StartScanAsync()
         {
-            throw new NotImplementedException();
+            await this.dataStreamConnector.StartAsync();
         }
 
         public override void StopScan()

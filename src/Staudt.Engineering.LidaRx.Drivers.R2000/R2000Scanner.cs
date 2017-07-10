@@ -42,12 +42,18 @@ namespace Staudt.Engineering.LidaRx.Drivers.R2000
         /// </summary>
         private HttpClient commandClient;
 
+        private R2000ProtocolVersion instanceProtocolVersion;
         private BasicSensorInformation SensorInformation;
         private SensorCapabilitiesInformation SensorCapabilities;
         private EthernetConfigurationInformation EthernetConfiguration;
         private MeasuringConfigurationInformation MeasurementConfiguration;
 
-
+        /// <summary>
+        /// Create a new R2000Scanner object given the scanner's IP address and 
+        /// the connection type used to stream LIDAR data
+        /// </summary>
+        /// <param name="address"></param>
+        /// <param name="connectionType"></param>
         public R2000Scanner(IPAddress address, R2000ConnectionType connectionType)
         {
             // retrieve basic info
@@ -58,23 +64,31 @@ namespace Staudt.Engineering.LidaRx.Drivers.R2000
         public override void Connect()
         {
             var protocolInfo = commandClient.GetAsAsync<ProtocolInformation>("get_protocol_info").Result;
-            var protocolVersion = protocolInfo.GetProtocolVersion();
+            this.instanceProtocolVersion = protocolInfo.GetProtocolVersion();
 
-            this.SensorInformation = FetchConfigObject<BasicSensorInformation>(protocolVersion).Result;
-            this.SensorCapabilities = FetchConfigObject<SensorCapabilitiesInformation>(protocolVersion).Result;
-            this.EthernetConfiguration = FetchConfigObject<EthernetConfigurationInformation>(protocolVersion).Result;
-            this.MeasurementConfiguration = FetchConfigObject<MeasuringConfigurationInformation>(protocolVersion).Result;
+            this.SensorInformation = FetchConfigObject<BasicSensorInformation>().Result;
+            this.SensorCapabilities = FetchConfigObject<SensorCapabilitiesInformation>().Result;
+            this.EthernetConfiguration = FetchConfigObject<EthernetConfigurationInformation>().Result;
+            this.MeasurementConfiguration = FetchConfigObject<MeasuringConfigurationInformation>().Result;
+
+            // Note: well... yes this is somewhat stupid, but hey(!) we managed to talk with
+            // the R2000, so everything's fine and dandy
+            this.connected = true;
         }
 
         public override async Task ConnectAsync()
         {
             var protocolInfo = await commandClient.GetAsAsync<ProtocolInformation>("get_protocol_info");
-            var protocolVersion = protocolInfo.GetProtocolVersion();
+            this.instanceProtocolVersion = protocolInfo.GetProtocolVersion();
 
-            this.SensorInformation = await FetchConfigObject<BasicSensorInformation>(protocolVersion);
-            this.SensorCapabilities = await FetchConfigObject<SensorCapabilitiesInformation>(protocolVersion);
-            this.EthernetConfiguration = await FetchConfigObject<EthernetConfigurationInformation>(protocolVersion);
-            this.MeasurementConfiguration = await FetchConfigObject<MeasuringConfigurationInformation>(protocolVersion);
+            this.SensorInformation = await FetchConfigObject<BasicSensorInformation>();
+            this.SensorCapabilities = await FetchConfigObject<SensorCapabilitiesInformation>();
+            this.EthernetConfiguration = await FetchConfigObject<EthernetConfigurationInformation>();
+            this.MeasurementConfiguration = await FetchConfigObject<MeasuringConfigurationInformation>();
+
+            // Note: well... yes this is somewhat stupid, but hey(!) we managed to talk with
+            // the R2000, so everything's fine and dandy
+            this.connected = true;
         }
 
         public override void Disconnect()
@@ -116,9 +130,9 @@ namespace Staudt.Engineering.LidaRx.Drivers.R2000
         /// <typeparam name="T"></typeparam>
         /// <param name="protocolVersion"></param>
         /// <returns></returns>
-        private async Task<T> FetchConfigObject<T>(R2000ProtocolVersion protocolVersion)
+        private async Task<T> FetchConfigObject<T>()
         {
-            var parameters = typeof(T).GetR2000ParametersList(protocolVersion);
+            var parameters = typeof(T).GetR2000ParametersList(this.instanceProtocolVersion);
             return await commandClient.GetAsAsync<T>($"get_parameter?list={String.Join(";", parameters)}");
         }
 

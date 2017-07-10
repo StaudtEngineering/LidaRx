@@ -23,35 +23,45 @@ using Newtonsoft.Json.Serialization;
 using Newtonsoft.Json;
 using System.Runtime.Serialization;
 using Newtonsoft.Json.Converters;
+using Staudt.Engineering.LidaRx.Drivers.R2000.Helpers;
 
 namespace Staudt.Engineering.LidaRx.Drivers.R2000.Serialization
 {
     class BasicSensorInformation
     {
+        [R2000ParameterInfo(R2000ParameterType.ReadOnlyStatic)]
         [JsonProperty(PropertyName = "device_family")]
         public R2000DeviceFamily DeviceFamilly { get; set; }
 
+        [R2000ParameterInfo(R2000ParameterType.ReadOnlyStatic)]
         [JsonProperty(PropertyName = "vendor")]
         public string Vendor { get; set; }
 
+        [R2000ParameterInfo(R2000ParameterType.ReadOnlyStatic)]
         [JsonProperty(PropertyName = "product")]
         public string Product { get; set; }
 
+        [R2000ParameterInfo(R2000ParameterType.ReadOnlyStatic)]
         [JsonProperty(PropertyName = "part")]
         public string Part { get; set; }
 
+        [R2000ParameterInfo(R2000ParameterType.ReadOnlyStatic)]
         [JsonProperty(PropertyName = "serial")]
         public string Serial { get; set; }
 
+        [R2000ParameterInfo(R2000ParameterType.ReadOnlyStatic)]
         [JsonProperty(PropertyName = "revision_fw")]
         public string RevisionFirmware { get; set; }
 
+        [R2000ParameterInfo(R2000ParameterType.ReadOnlyStatic)]
         [JsonProperty(PropertyName = "revision_hw")]
         public string RevisionHardware { get; set; }
 
+        [R2000ParameterInfo(R2000ParameterType.ReadWrite)]
         [JsonProperty(PropertyName = "user_tag")]
         public string UserDefinedTag { get; set; }
 
+        [R2000ParameterInfo(R2000ParameterType.ReadWrite)]
         [JsonProperty(PropertyName = "user_notes")]
         public string UserDefinedNotes { get; set; }
 
@@ -74,45 +84,59 @@ namespace Staudt.Engineering.LidaRx.Drivers.R2000.Serialization
 
     class SensorCapabilitiesInformation
     {
-        [JsonProperty(PropertyName = "features_flags")]
+        [R2000ParameterInfo(R2000ParameterType.ReadOnlyStatic)]
+        [JsonProperty(PropertyName = "feature_flags")]
         public string[] Features { get; set; }
 
-        [JsonProperty(PropertyName = "emitter_type")]
-        public R2000EmitterType EmitterType { get; set; }
+    //    [R2000ParameterType(R2000ParameterType.ReadOnlyStatic)]
+    //    [JsonProperty(PropertyName = "emitter_type")]
+    //    public R2000EmitterType EmitterType { get; set; }
 
+        [R2000ParameterInfo(R2000ParameterType.ReadOnlyStatic)]
         [JsonProperty(PropertyName = "radial_range_min")]
         public double RadialRangeMin { get; set; }
 
+        [R2000ParameterInfo(R2000ParameterType.ReadOnlyStatic)]
         [JsonProperty(PropertyName = "radial_range_max")]
         public double RadialRangeMax { get; set; }
 
+        [R2000ParameterInfo(R2000ParameterType.ReadOnlyStatic)]
         [JsonProperty(PropertyName = "radial_resolution")]
         public double RadialResolution { get; set; }
 
+        [R2000ParameterInfo(R2000ParameterType.ReadOnlyStatic)]
         [JsonProperty(PropertyName = "angular_fov")]
         public double AngularFieldOfView { get; set; }
 
+        [R2000ParameterInfo(R2000ParameterType.ReadOnlyStatic)]
         [JsonProperty(PropertyName = "angular_resolution")]
         public double AngularResulution { get; set; }
 
-        [JsonProperty(PropertyName = "scan_frequency_min")]
-        public uint ScanFrequencyMin { get; set; }
+        //[R2000ParameterType(R2000ParameterType.ReadOnlyStatic)]
+        //[JsonProperty(PropertyName = "scan_frequency_min")]
+        //public uint ScanFrequencyMin { get; set; }
 
-        [JsonProperty(PropertyName = "scan_frequency_max")]
-        public uint ScanFrequencyMax { get; set; }
+        //[R2000ParameterType(R2000ParameterType.ReadOnlyStatic)]
+        //[JsonProperty(PropertyName = "scan_frequency_max")]
+        //public uint ScanFrequencyMax { get; set; }
 
-        [JsonProperty(PropertyName = "sampling_rate_min")]
-        public uint SamplingRateMin { get; set; }
+        //[R2000ParameterType(R2000ParameterType.ReadOnlyStatic)]
+        //[JsonProperty(PropertyName = "sampling_rate_min")]
+        //public uint SamplingRateMin { get; set; }
 
-        [JsonProperty(PropertyName = "sampling_rate_max")]
-        public uint SamplingRateMax { get; set; }
+        //[R2000ParameterType(R2000ParameterType.ReadOnlyStatic)]
+        //[JsonProperty(PropertyName = "sampling_rate_max")]
+        //public uint SamplingRateMax { get; set; }
 
+        [R2000ParameterInfo(R2000ParameterType.ReadOnlyStatic)]
         [JsonProperty(PropertyName = "max_connections")]
         public uint MaxConnections { get; set; }
 
+        [R2000ParameterInfo(R2000ParameterType.ReadOnlyStatic)]
         [JsonProperty(PropertyName = "max_scan_sectors")]
         public uint MaxScanSectors { get; set; }
 
+        [R2000ParameterInfo(R2000ParameterType.ReadOnlyStatic)]
         [JsonProperty(PropertyName = "max_data_regions")]
         public uint MaxDataRegions { get; set; }
 
@@ -140,18 +164,23 @@ namespace Staudt.Engineering.LidaRx.Drivers.R2000.Serialization
 
     class EthernetConfigurationInformation
     {
+        [R2000ParameterInfo(R2000ParameterType.ReadWrite)]
         [JsonProperty(PropertyName = "ip_mode")]
         public R2000IpMode IpMode { get; set; }
 
+        [R2000ParameterInfo(R2000ParameterType.ReadWrite)]
         [JsonProperty(PropertyName = "ip_address")]
         public string IPAdress { get; set; }
 
+        [R2000ParameterInfo(R2000ParameterType.ReadWrite)]
         [JsonProperty(PropertyName = "subnet_mask")]
         public string SubnetMask { get; set; }
 
+        [R2000ParameterInfo(R2000ParameterType.ReadWrite)]
         [JsonProperty(PropertyName = "gateway")]
         public string Gateway { get; set; }
 
+        [R2000ParameterInfo(R2000ParameterType.ReadOnly)]
         [JsonProperty(PropertyName = "mac_address")]
         public string MacAddress { get; set; }
 
@@ -186,18 +215,23 @@ namespace Staudt.Engineering.LidaRx.Drivers.R2000.Serialization
 
     class MeasuringConfigurationInformation
     {
-        [JsonProperty(PropertyName = "operating_mode")]
-        public R2000OperationMode OperationMode { get; set; }
+        //[R2000ParameterType(R2000ParameterType.Volatile)]
+        //[JsonProperty(PropertyName = "operating_mode")]
+        //public R2000OperationMode OperationMode { get; set; }
 
+        [R2000ParameterInfo(R2000ParameterType.ReadWrite)]
         [JsonProperty(PropertyName = "scan_frequency")]
         public double ScanFrequency { get; set; }
 
+        [R2000ParameterInfo(R2000ParameterType.ReadWrite)]
         [JsonProperty(PropertyName = "scan_direction")]
         public R2000ScanDirection ScanDirection { get; set; }
 
+        [R2000ParameterInfo(R2000ParameterType.ReadWrite)]
         [JsonProperty(PropertyName = "samples_per_scan")]
         public uint SamplesPerScan { get; set; }
 
+        [R2000ParameterInfo(R2000ParameterType.ReadOnly)]
         [JsonProperty(PropertyName = "scan_frequency_measured")]
         public double CurrentScanFrequency { get; set; }
 

@@ -21,6 +21,7 @@
 
 using Newtonsoft.Json;
 using Staudt.Engineering.LidaRx.Drivers.R2000.Connectors;
+using Staudt.Engineering.LidaRx.Drivers.R2000.Exceptions;
 using Staudt.Engineering.LidaRx.Drivers.R2000.Helpers;
 using Staudt.Engineering.LidaRx.Drivers.R2000.Serialization;
 using System;
@@ -79,6 +80,10 @@ namespace Staudt.Engineering.LidaRx.Drivers.R2000
             if(connectionType == R2000ConnectionType.TCPConnection)
             {
                 this.dataStreamConnector = new TCPConnector(commandClient, address, true, 10000);
+            }
+            else if(connectionType == R2000ConnectionType.UDPConnection)
+            {
+                throw new NotImplementedException();
             }
 
             var latestNativeScanCounter = 0;
@@ -191,23 +196,17 @@ namespace Staudt.Engineering.LidaRx.Drivers.R2000
                 if (fetchStatusCts.IsCancellationRequested)
                     break;
 
-                try
-                {
-                    // fetch and publish the status
-                    var status = await FetchConfigObject<R2000Status>();
+                // fetch and publish the status
+                var status = await FetchConfigObject<R2000Status>();
 
-                    if (status.ErrorCode == R2000ErrorCode.Success)
-                    {
-                        this.MeasurementConfiguration.CurrentScanFrequency = status.CurrentScanFrequency;
-                        PublishLidarEvent(status);
-                    }
-
-                    await Task.Delay(fetchStatusInterval);
-                }
-                catch
+                if (status.ErrorCode == R2000ErrorCode.Success)
                 {
-                    // TODO: log failures
+                    this.MeasurementConfiguration.CurrentScanFrequency = status.CurrentScanFrequency;
+                    PublishLidarEvent(status);
                 }
+                else throw new R2000ProtocolErrorException(null, "Retrieving R2000 status failed");
+
+                await Task.Delay(fetchStatusInterval);
             }
 
             // not connected any more!
@@ -361,8 +360,7 @@ namespace Staudt.Engineering.LidaRx.Drivers.R2000
         /// <param name="value">Target value</param>
         /// <returns></returns>
         private async Task SetConfigParameter<TObj, TParam>(Expression<Func<TObj,TParam>> selector, TParam value)
-        {
-            
+        {            
             Type type = typeof(TObj);
 
             MemberExpression member = selector.Body as MemberExpression;
@@ -402,7 +400,13 @@ namespace Staudt.Engineering.LidaRx.Drivers.R2000
             var result = await commandClient.GetAsAsync<SetParameterResult>(request);
 
             if (result.ErrorCode != R2000ErrorCode.Success)
-                throw new Exception($"Could not set parameter {name} to value '{paramEncoded}' because {result.ErrorText}");
+            {
+                if (result is IR2000ResponseWithError)
+                    throw new R2000ProtocolErrorException((IR2000ResponseWithError)result, $"Could not set parameter { name } to value '{paramEncoded}'");
+                else
+                    throw new Exception($"Could not set parameter { name } to value '{paramEncoded}' because {result.ErrorText}");
+
+            }
         }
 
         #endregion

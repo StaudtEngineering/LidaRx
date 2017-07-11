@@ -33,6 +33,7 @@ using System.Threading.Tasks;
 using System.Net;
 using System.Runtime.InteropServices;
 using System.Collections.Concurrent;
+using Staudt.Engineering.LidaRx.Drivers.R2000.Exceptions;
 
 namespace Staudt.Engineering.LidaRx.Drivers.R2000.Connectors
 {
@@ -145,7 +146,7 @@ namespace Staudt.Engineering.LidaRx.Drivers.R2000.Connectors
             if(handle.ErrorCode != R2000ErrorCode.Success)
             {
                 sem.Release();  // avoid deadlock
-                throw new LidException("");
+                throw new R2000ProtocolErrorException(handle, "Could not acquire tcp handle");
             }
 
             this.currentHandle = handle;
@@ -174,13 +175,13 @@ namespace Staudt.Engineering.LidaRx.Drivers.R2000.Connectors
             await tcpClient.ConnectAsync(this.r2000IpAddress, this.currentHandle.Port);
 
             // start sending stuff
-            var started = await httpClient.GetAsAsync<StartCanOutputResponse>($"start_scanoutput?handle={currentHandle.HandleName}");
+            var started = await httpClient.GetAsAsync<R2000ProtocolBaseResponse>($"start_scanoutput?handle={currentHandle.HandleName}");
 
             if(started.ErrorCode != R2000ErrorCode.Success)
             {
                 // abort and throw
                 cts.Cancel();
-                throw new Exception($"Couldn't start the scan data transmission because {started.ErrorText}");
+                throw new R2000ProtocolErrorException(started, "Couldn't start the tcp data transmission");
             }
 
             this.running = true;
@@ -402,29 +403,12 @@ namespace Staudt.Engineering.LidaRx.Drivers.R2000.Connectors
         #endregion
     }
 
-    class TcpHandleRequestCommandResult
+    class TcpHandleRequestCommandResult : R2000ProtocolBaseResponse
     {
         [JsonProperty(PropertyName = "port")]
         public int Port { get; set; }
 
         [JsonProperty(PropertyName = "handle")]
         public string HandleName { get; set; }
-
-        [JsonProperty(PropertyName = "error_code")]
-        public R2000ErrorCode ErrorCode { get; set; }
-
-        [JsonProperty(PropertyName = "error_text")]
-        public string ErrorText { get; set; }
     }
-
-    class StartCanOutputResponse
-    {
-        [JsonProperty(PropertyName = "error_code")]
-        public R2000ErrorCode ErrorCode { get; set; }
-
-        [JsonProperty(PropertyName = "error_text")]
-        public string ErrorText { get; set; }
-    }
-
-
 }

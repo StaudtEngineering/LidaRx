@@ -43,7 +43,10 @@ namespace Staudt.Engineering.LidaRx.Drivers.R2000.Connectors
 
         bool watchdogEnabled;
         int watchdogTimeout;
-        R2000ProtocolVersion protocolVersion;
+
+        // Note: need to know this in order to decide which communication channel to use 
+        // to reset the watchdog timer. When > 1.01 use the TCP "back channel"
+        R2000ProtocolVersion protocolVersion; 
 
         SemaphoreSlim sem = new SemaphoreSlim(1, 1);
         bool running = false;
@@ -109,16 +112,18 @@ namespace Staudt.Engineering.LidaRx.Drivers.R2000.Connectors
         #region IR2000Connector
         public async Task StartAsync()
         {
-            // we're already running
-            if (running)
-                return;
-
             await sem.WaitAsync();
+
+            if (running)
+            {
+                sem.Release();
+                return;
+            }
 
             // create a new tcp client
             this.tcpClient = new TcpClient();
 
-            // request new handle
+            // build query to request a new handle
             var requestBuild = new StringBuilder();
             requestBuild.Append("request_handle_tcp?packet_type=B&start_angle=0");
 
@@ -139,8 +144,8 @@ namespace Staudt.Engineering.LidaRx.Drivers.R2000.Connectors
 
             if(handle.ErrorCode != R2000ErrorCode.Success)
             {
-                // TODO:
-                throw new Exception("Blub");
+                sem.Release();  // avoid deadlock
+                throw new LidException("");
             }
 
             this.currentHandle = handle;
@@ -277,6 +282,8 @@ namespace Staudt.Engineering.LidaRx.Drivers.R2000.Connectors
             // request cancellation if it's not already done!
             if (!cts.IsCancellationRequested)
                 cts.Cancel();
+
+            running = false;
         }
 
         private async void FeedWatchdogTcp()
@@ -311,6 +318,8 @@ namespace Staudt.Engineering.LidaRx.Drivers.R2000.Connectors
             // request cancellation if it's not already done!
             if (!cts.IsCancellationRequested)
                 cts.Cancel();
+
+            running = false;
         }
 
         private async void FeedWatchdogHttp()
@@ -348,6 +357,8 @@ namespace Staudt.Engineering.LidaRx.Drivers.R2000.Connectors
             // request cancellation if it's not already done!
             if (!cts.IsCancellationRequested)
                 cts.Cancel();
+
+            running = false;
         }
 
         public async Task StopAsync()

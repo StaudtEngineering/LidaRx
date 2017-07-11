@@ -30,8 +30,8 @@ Features
 Supported devices
 -----------------
 
-- Scanse.io SWEEP [Readme](src/Staudt.Engineering.LidaRx.Drivers.Sweep/Readme.md)
-- Pepperl+Fuchs OMDxxx-R2000 device familly (HD and UHD) [Readme](src/Staudt.Engineering.LidaRx.Drivers.R2000/Readme.md)
+- Scanse.io SWEEP [Readme](/src/Staudt.Engineering.LidaRx.Drivers.Sweep/Readme.md)
+- Pepperl+Fuchs OMDxxx-R2000 device familly (HD and UHD) [Readme](/src/Staudt.Engineering.LidaRx.Drivers.R2000/Readme.md)
 
 Show me some code!
 ------------------
@@ -128,7 +128,7 @@ License
 lidaRx is dual licenced. Unless you've made a separate licence agreement with Staudt 
 Engineering (for example because you can't stand the LGPL / use contact form on 
 http://www.staudt-engineering.com) you can use lidaRx under the GNU Lesser General 
-Public License v3.0. The full licence text is available in this repository. [LICENCE](LICENCE)
+Public License v3.0. The full licence text is available in this repository. [LICENCE](/LICENCE)
 
 Support & Contribution
 ----------------------

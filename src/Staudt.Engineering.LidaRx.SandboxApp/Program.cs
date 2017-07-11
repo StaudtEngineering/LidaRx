@@ -23,8 +23,10 @@ namespace Staudt.Engineering.LidaRx.SandboxApp
             {
                 r2000.Connect();
 
-                r2000.SetSamplingRate(R2000SamplingRate._252kHz);
-                r2000.SetScanFrequency(10);
+                r2000.SetSamplingRate(R2000SamplingRate._40kHz);
+                r2000.SetScanFrequency(50);
+                //r2000.SetSamplingRate(R2000SamplingRate._252kHz);
+                
 
 
                 r2000.OfType<R2000Status>().Subscribe(_ =>

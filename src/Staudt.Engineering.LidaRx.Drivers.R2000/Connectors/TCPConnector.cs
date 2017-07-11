@@ -32,6 +32,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using System.Net;
 using System.Runtime.InteropServices;
+using System.Collections.Concurrent;
 
 namespace Staudt.Engineering.LidaRx.Drivers.R2000.Connectors
 {
@@ -42,13 +43,16 @@ namespace Staudt.Engineering.LidaRx.Drivers.R2000.Connectors
 
         bool watchdogEnabled;
         int watchdogTimeout;
+        R2000ProtocolVersion protocolVersion;
 
         SemaphoreSlim sem = new SemaphoreSlim(1, 1);
         bool running = false;
 
         Thread watchdog;
         Thread receiveData;
+        Thread dispatchData;
         CancellationTokenSource cts;
+        ConcurrentBag<byte[]> ReceivedBuffers = new ConcurrentBag<byte[]>();
 
         TcpHandleRequestCommandResult currentHandle;
         IPAddress r2000IpAddress;
@@ -57,7 +61,8 @@ namespace Staudt.Engineering.LidaRx.Drivers.R2000.Connectors
             HttpClient httpc,
             IPAddress address,
             bool enableWatchdog = true,
-            int watchdogTimeout = 10000)
+            int watchdogTimeout = 10000,
+            R2000ProtocolVersion protocolVersion = R2000ProtocolVersion.v100)
         {
             this.observers = new List<IObserver<ScanFramePoint>>();
 
@@ -67,6 +72,7 @@ namespace Staudt.Engineering.LidaRx.Drivers.R2000.Connectors
 
             this.watchdogEnabled = enableWatchdog;
             this.watchdogTimeout = watchdogTimeout;
+            this.protocolVersion = protocolVersion;
         }
 
         #region IDisposable
@@ -139,10 +145,18 @@ namespace Staudt.Engineering.LidaRx.Drivers.R2000.Connectors
 
             this.receiveData = new Thread(ReceiveData);
             this.receiveData.Start();
+            this.dispatchData = new Thread(DispatchData);
+            this.dispatchData.Start();
 
             if (watchdogEnabled)
             {
-                this.watchdog = new Thread(FeedWatchdog);
+                // on newer protocol versions the R2000 supports using the TCP "back" channel 
+                // to reset the watchdog counter. On older versions we issue HTTP queries...
+                if (this.protocolVersion >= R2000ProtocolVersion.v101)
+                    this.watchdog = new Thread(FeedWatchdogTcp);
+                else
+                    this.watchdog = new Thread(FeedWatchdogHttp);
+
                 this.watchdog.Start();
             }
 
@@ -163,28 +177,16 @@ namespace Staudt.Engineering.LidaRx.Drivers.R2000.Connectors
             sem.Release();
         }
 
-        private async void ReceiveData()
+        private async void DispatchData()
         {
-            while (!tcpClient.Connected)
+            while (!cts.IsCancellationRequested)
             {
-                await Task.Delay(10);
-            }
+                byte[] buff = null;
 
-            var stream = tcpClient.GetStream();
-            byte[] buff = new byte[tcpClient.ReceiveBufferSize];
-
-            // repeat
-            while (true)
-            {
-                while(stream.CanRead)
+                if (!ReceivedBuffers.TryTake(out buff))
+                    await Task.Delay(10);
+                else
                 {
-                    // read some chars
-                    var count = await stream.ReadAsync(buff, 0, (int)tcpClient.ReceiveBufferSize);
-
-                    // we need (at least) a full header
-                    if (count < Marshal.SizeOf<ScanFrameHeader>())
-                        continue;
-
                     // deserialize the header
                     var header = buff.BytesToStruct<ScanFrameHeader>(0);
 
@@ -192,10 +194,13 @@ namespace Staudt.Engineering.LidaRx.Drivers.R2000.Connectors
                     if (header.Magic != 0xa25c)
                         continue;
 
+                    // unit: 1/10000th of a degree
                     var angle = ((float)header.FirstAngleInThisPacket) / 10000;
                     var angleInc = ((float)header.AnglularIncrement) / 10000;
 
-                    for (var offset = header.HeaderSize + 1; offset < header.PacketSize; offset += Marshal.SizeOf<ScanFramePointNative>())
+                    var offsetIncrement = (ushort)Marshal.SizeOf<ScanFramePointNative>();
+
+                    for (var offset = header.HeaderSize; offset < header.PacketSize; offset += offsetIncrement)
                     {
                         var pointNative = buff.BytesToStruct<ScanFramePointNative>(offset);
 
@@ -206,7 +211,7 @@ namespace Staudt.Engineering.LidaRx.Drivers.R2000.Connectors
                             Angle = angle,
                             ScanCounter = header.ScanNumber
                         };
-
+                       
                         foreach (var o in observers)
                         {
                             o.OnNext(point);
@@ -214,10 +219,45 @@ namespace Staudt.Engineering.LidaRx.Drivers.R2000.Connectors
 
                         angle += angleInc;
                     }
+                }                    
+            }
+        }
 
-                    // clear the array
-                    Array.Clear(buff, 0, count);
+        private async void ReceiveData()
+        {
+            while (!tcpClient.Connected)
+            {
+                if (cts.IsCancellationRequested)
+                    break;
+
+                await Task.Delay(10);
+            }
+
+            var stream = tcpClient.GetStream();
+            byte[] buff = new byte[tcpClient.ReceiveBufferSize];
+
+            while(stream.CanRead)
+            {
+                if (cts.IsCancellationRequested)
+                    break;
+
+                // read some chars
+                var count = await stream.ReadAsync(buff, 0, (int)tcpClient.ReceiveBufferSize);
+
+                // we need (at least) a full header
+                if (count < Marshal.SizeOf<ScanFrameHeader>())
+                {
+                    await Task.Delay(1);
+                    continue;
                 }
+                else
+                {
+                    var slice = new byte[count];
+                    Array.Copy(buff, slice, count);
+                    ReceivedBuffers.Add(slice);
+                }
+
+                Array.Clear(buff, 0, count);
             }
 
             // request cancellation if it's not already done!
@@ -225,14 +265,71 @@ namespace Staudt.Engineering.LidaRx.Drivers.R2000.Connectors
                 cts.Cancel();
         }
 
-        private async void FeedWatchdog()
+        private async void FeedWatchdogTcp()
         {
             // repeat
-            while (true)
+            while (!tcpClient.Connected)
             {
+                if (cts.IsCancellationRequested)
+                    break;
+
+                await Task.Delay(10);
+            }
+
+            var stream = tcpClient.GetStream();
+            byte[] feedMessage = new byte[] { 0x66, 0x65, 0x65, 0x64, 0x77, 0x64, 0x67, 0x04 };
+
+            var feedInterval = this.watchdogTimeout / 4;
+
+            // at most once every second as per datasheet
+            if (feedInterval < 1000)
+                feedInterval = 1000;
+
+            while (stream.CanWrite)
+            {
+                if (cts.IsCancellationRequested)
+                    break;
+
+                await stream.WriteAsync(feedMessage, 0, feedMessage.Length);
+                await Task.Delay(feedInterval);
+            }
+             
+            // request cancellation if it's not already done!
+            if (!cts.IsCancellationRequested)
+                cts.Cancel();
+        }
+
+        private async void FeedWatchdogHttp()
+        {
+            // wait until we're connected
+            while (!tcpClient.Connected)
+            {
+                if (cts.IsCancellationRequested)
+                    break;
+
+                await Task.Delay(10);
+            }
+
+            var feedInterval = this.watchdogTimeout / 4;
+
+            // at most once every second as per datasheet
+            if (feedInterval < 1000)
+                feedInterval = 1000;
+
+            while (tcpClient.Connected)
+            {
+                if (cts.IsCancellationRequested)
+                    break;
+
+                var result = await httpClient.GetAsAsync<SetParameterResult>($"feed_watchdog?handle={currentHandle.HandleName}");
+
+                if (result.ErrorCode != R2000ErrorCode.Success)
+                {
+                    // todo
+                }
 
 
-
+                await Task.Delay(feedInterval);
             }
 
             // request cancellation if it's not already done!

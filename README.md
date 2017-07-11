@@ -1,12 +1,12 @@
 Staudt Engineering / lidaRx
----------------------------
+===========================
 
 A lightweight but powerful Lidar scanner driver and data processing library for 
 .NET providing support for multiple Lidar scanners and an intuitive way to process 
 samples received by the scanner. 
 
 Features
-========
+--------
 
 - Unified data processing
 - 3D coordinates 
@@ -28,17 +28,17 @@ Features
 - Cross plattform: runs on .NET Core too(!)
 
 Supported devices
-=================
+-----------------
 
-- Scanse.io SWEEP
-- Pepperl+Fuchs OMDxxx-R2000 device familly (HD and UHD)
+- Scanse.io SWEEP [Readme](src/Staudt.Engineering.LidaRx.Drivers.Sweep/Readme.md)
+- Pepperl+Fuchs OMDxxx-R2000 device familly (HD and UHD) [Readme](src/Staudt.Engineering.LidaRx.Drivers.R2000/Readme.md)
 
-Show me some code
-=================
+Show me some code!
+------------------
 
 Here's a  simple example using a Scanse.io Sweep sensor. 
 
-Basically the programm connects to the Sweep on `Com1`, set the motor speed to 10Hz and the sample rate to 1kHz.
+Basically the programm connects to the Sweep on `Com1`, set the motor speed to 10Hz and the sample rate to 1kHz
 
 ```csharp
 using (var sweep = new SweepScanner("COM1"))
@@ -50,7 +50,7 @@ using (var sweep = new SweepScanner("COM1"))
 	await sweep.StartScanAsync();
 ```
 
-...the the programm registers for `LidarStatusEvent` with the `LidarStatusLevel.Error` and logs the
+...then the programm registers for `LidarStatusEvent` with the `LidarStatusLevel.Error` and logs the
 messages to the console.
 
 ```csharp
@@ -115,16 +115,25 @@ the code above it buffers by scan (basically per scanner head revolution).
 }
 ```
 
+Roadmap
+-------
+
+- Usable implementation of 3D colision test (think of `PointsIn3DModel(string pathToStlFile)` )
+- Points to object matching
+- Point agglomeration tracking 
+
 License
-=======
+-------
 
-lidaRx is dual licenced. Unless you've made a separate licence agreement with
-Staudt Engineering (use contact form on http://www.staudt-engineering.com) you
-can use lidaRx under the GNU Lesser General Public License v3.0. The full 
-licence is available in this repository.
+lidaRx is dual licenced. Unless you've made a separate licence agreement with Staudt 
+Engineering (for example because you can't stand the LGPL / use contact form on 
+http://www.staudt-engineering.com) you can use lidaRx under the GNU Lesser General 
+Public License v3.0. The full licence text is available in this repository. [LICENCE](LICENCE)
 
-Support
-=======
+Support & Contribution
+----------------------
 
-Commercial support is available, support for open source usage is limited on a 
-"free time available" basis, but please feel free to open issues.
+Commercial support and device driver developement service is available, support
+for open source usage is limited on a "free time available" basis, but please 
+feel free to open issues or pull requests if you can think of something that
+would make this library more awesome :)

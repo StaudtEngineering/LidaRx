@@ -45,15 +45,29 @@ namespace Staudt.Engineering.LidaRx
         }
 
         /// <summary>
-        /// Filter for LidarErrorEvents
+        /// Filter for LidarStatusEvents
         /// </summary>
         /// <param name="source"></param>
         /// <returns></returns>
-        public static IObservable<LidarErrorEvent> OnlyErrorEvents(this IObservable<ILidarEvent> source)
+        public static IObservable<LidarStatusEvent> OnlyStatusEvents(this IObservable<ILidarEvent> source)
         {
-            return source.OfType<LidarErrorEvent>();
+            return source.OfType<LidarStatusEvent>();
         }
 
+        /// <summary>
+        /// Filter for LidarStatusEvents with a given LidarStatusLevel
+        /// </summary>
+        /// <param name="source"></param>
+        /// <param name="levelFilter"></param>
+        /// <returns></returns>
+        public static IObservable<LidarStatusEvent> OnlyStatusEvents(this IObservable<ILidarEvent> source, LidarStatusLevel levelFilter)
+        {
+            return source.OfType<LidarStatusEvent>().Where(x => x.Level == levelFilter);
+        }
+
+        /// <summary>
+        /// Helper class
+        /// </summary>
         class PointByScanBuffer : ConcurrentDictionary<long, List<LidarPoint>>
         {
             public long LastScan = -1;

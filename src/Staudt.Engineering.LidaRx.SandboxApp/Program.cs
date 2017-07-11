@@ -23,8 +23,11 @@ namespace Staudt.Engineering.LidaRx.SandboxApp
             {
                 r2000.Connect();
 
-                r2000.SetSamplingRate(R2000SamplingRate._40kHz);
-                r2000.SetScanFrequency(20);
+
+
+                r2000.SetSamplingRate(R2000SamplingRate._8kHz);
+                r2000.SetScanFrequency(15);
+                r2000.SetSamplingRate(R2000SamplingRate._252kHz);
 
                 r2000.OfType<R2000Status>().Subscribe(_ =>
                 {
@@ -41,6 +44,18 @@ namespace Staudt.Engineering.LidaRx.SandboxApp
                     .Subscribe(scan =>
                     {
                         Console.WriteLine($"Got {scan.Count} points for scan {scan.Scan}");
+                    });
+
+                r2000.OnlyLidarPoints()
+                    .Where(x => x.Distance >= 400 && x.Distance <= 1000)
+                    .PointsInAzimuthRange(-45, 45)
+                    .BufferByScan()      
+                    //.Buffer(TimeSpan.FromSeconds(1))
+                    .Subscribe(x =>
+                    {
+                        //Console.WriteLine($"Scans per second: {x.Count}");
+                        Console.WriteLine($"Distance: {x.Points.Average(y => y.Distance)}  / points {x.Count}");
+
                     });
 
                 r2000.StartScan();

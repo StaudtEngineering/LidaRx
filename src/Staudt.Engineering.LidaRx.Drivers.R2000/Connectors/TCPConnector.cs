@@ -56,7 +56,7 @@ namespace Staudt.Engineering.LidaRx.Drivers.R2000.Connectors
         Thread receiveData;
         Thread dispatchData;
         CancellationTokenSource cts;
-        ConcurrentBag<byte[]> ReceivedBuffers = new ConcurrentBag<byte[]>();
+        ConcurrentQueue<byte[]> ReceivedBuffers = new ConcurrentQueue<byte[]>();
 
         TcpHandleRequestCommandResult currentHandle;
         IPAddress r2000IpAddress;
@@ -194,7 +194,7 @@ namespace Staudt.Engineering.LidaRx.Drivers.R2000.Connectors
             {
                 byte[] buff = null;
 
-                if (!ReceivedBuffers.TryTake(out buff))
+                if (!ReceivedBuffers.TryDequeue(out buff))
                     await Task.Delay(10);
                 else
                 {
@@ -247,6 +247,8 @@ namespace Staudt.Engineering.LidaRx.Drivers.R2000.Connectors
             var stream = tcpClient.GetStream();
             byte[] buff = new byte[tcpClient.ReceiveBufferSize];
 
+            var headerSize = Marshal.SizeOf<ScanFrameHeader>();
+
             try
             {
 
@@ -256,10 +258,10 @@ namespace Staudt.Engineering.LidaRx.Drivers.R2000.Connectors
                         break;
 
                     // read some chars
-                    var count = await stream.ReadAsync(buff, 0, (int)tcpClient.ReceiveBufferSize);
+                    var count = await stream.ReadAsync(buff, 0, tcpClient.ReceiveBufferSize);
 
                     // we need (at least) a full header
-                    if (count < Marshal.SizeOf<ScanFrameHeader>())
+                    if (count < headerSize)
                     {
                         await Task.Delay(1);
                         continue;
@@ -267,11 +269,11 @@ namespace Staudt.Engineering.LidaRx.Drivers.R2000.Connectors
                     else
                     {
                         var slice = new byte[count];
-                        Array.Copy(buff, slice, count);
-                        ReceivedBuffers.Add(slice);
-                    }
+                        Array.Copy(buff, 0, slice, 0, count);
+                        ReceivedBuffers.Enqueue(slice);
 
-                    Array.Clear(buff, 0, count);
+                        Array.Clear(buff, 0, count);
+                    }
                 }
 
             }
@@ -380,7 +382,7 @@ namespace Staudt.Engineering.LidaRx.Drivers.R2000.Connectors
             }
 
             // "clear" the buffer
-            ReceivedBuffers = new ConcurrentBag<byte[]>();
+            ReceivedBuffers = new ConcurrentQueue<byte[]>();
 
             this.running = false;
 

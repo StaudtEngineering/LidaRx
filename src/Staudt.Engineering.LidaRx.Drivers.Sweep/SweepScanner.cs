@@ -706,7 +706,7 @@ namespace Staudt.Engineering.LidaRx.Drivers.Sweep
                     return;
 
                 // propagate the new lidar point through the system
-                var scanPacket = new LidarPoint(carthesianPoint, azimuth, distance, signal, this.ScanCounter);
+                var scanPacket = new LidarPoint(carthesianPoint, azimuth, distance, signal, this.ScanCounter, this);
                 PublishLidarEvent(scanPacket);
             }
         }

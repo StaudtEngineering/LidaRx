@@ -25,13 +25,14 @@ namespace Staudt.Engineering.LidaRx
 {
     public class LidarPoint : ILidarEvent
     {
-        public LidarPoint(Vector3 point, float azimuth, float distance, byte amplitude, long scan)
+        public LidarPoint(Vector3 point, float azimuth, float distance, byte amplitude, long scan, ILidarScanner scanner)
         {
             this.Point = point;
             this.Amplitude = amplitude;
             this.Azimuth = azimuth;
             this.Distance = distance;
             this.Scan = scan;
+            this.Scanner = scanner;
         }
 
         /// <summary>
@@ -58,5 +59,10 @@ namespace Staudt.Engineering.LidaRx
         /// A scan counter, overflows
         /// </summary>
         public long Scan { get; }
+
+        /// <summary>
+        /// Scanner which emitted this point
+        /// </summary>
+        public ILidarScanner Scanner { get; }
     }
 }

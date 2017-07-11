@@ -100,7 +100,8 @@ namespace Staudt.Engineering.LidaRx.Drivers.R2000
                     pt.Angle, 
                     pt.Distance,
                     (byte)(pt.Amplitude / 256), 
-                    base.ScanCounter);
+                    base.ScanCounter,
+                    this);
 
                 PublishLidarEvent(point);
             });

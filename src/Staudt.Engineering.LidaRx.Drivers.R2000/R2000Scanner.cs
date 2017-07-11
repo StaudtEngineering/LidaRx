@@ -81,9 +81,18 @@ namespace Staudt.Engineering.LidaRx.Drivers.R2000
                 this.dataStreamConnector = new TCPConnector(commandClient, address, true, 10000);
             }
 
+            var latestNativeScanCounter = 0;
 
             this.dataStreamConnector.Subscribe(pt =>
             {
+                // we don't use the native R2000 scan counter at it wraps around quite quickly
+                // thus, we store the "latestNativeCounter" and check for increment or wraparound
+                if (pt.ScanCounter > latestNativeScanCounter || pt.ScanCounter < latestNativeScanCounter)
+                {
+                    latestNativeScanCounter = pt.ScanCounter;
+                    base.ScanCounter++;
+                }
+
                 var carthCoordinate = base.TransfromScannerToSystemCoordinates(pt.Angle, pt.Distance);
 
                 var point = new LidarPoint(
@@ -91,10 +100,9 @@ namespace Staudt.Engineering.LidaRx.Drivers.R2000
                     pt.Angle, 
                     pt.Distance,
                     (byte)(pt.Amplitude / 256), 
-                    pt.ScanCounter);
+                    base.ScanCounter);
 
                 PublishLidarEvent(point);
-
             });
         }
 
@@ -130,31 +138,45 @@ namespace Staudt.Engineering.LidaRx.Drivers.R2000
         public override void Disconnect()
         {
             fetchStatusCts.Cancel();
+
+            if (IsScanning)
+                StopScan();
         }
 
         public override async Task DisconnectAsync()
         {
             fetchStatusCts.Cancel();
+
+            if (IsScanning)
+                await StopScanAsync();
         }
 
         public override void StartScan()
         {
             this.dataStreamConnector.StartAsync().Wait();
+            isScanning = true;
         }
 
         public override async Task StartScanAsync()
         {
             await this.dataStreamConnector.StartAsync();
+            isScanning = true;
         }
 
         public override void StopScan()
         {
-            throw new NotImplementedException();
+            if (IsScanning)
+                this.dataStreamConnector.StopAsync().Wait();
+
+            isScanning = false;
         }
 
         public override async Task StopScanAsync()
         {
-            throw new NotImplementedException();
+            if (IsScanning)
+                await this.dataStreamConnector.StopAsync();
+
+            isScanning = false;
         }
 
         #region Fetch status stuff

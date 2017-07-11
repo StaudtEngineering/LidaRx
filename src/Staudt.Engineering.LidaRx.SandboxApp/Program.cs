@@ -24,10 +24,7 @@ namespace Staudt.Engineering.LidaRx.SandboxApp
                 r2000.Connect();
 
                 r2000.SetSamplingRate(R2000SamplingRate._40kHz);
-                r2000.SetScanFrequency(50);
-                //r2000.SetSamplingRate(R2000SamplingRate._252kHz);
-                
-
+                r2000.SetScanFrequency(20);
 
                 r2000.OfType<R2000Status>().Subscribe(_ =>
                 {
@@ -51,8 +48,18 @@ namespace Staudt.Engineering.LidaRx.SandboxApp
 
                 while (true)
                 {
-                    if (Console.ReadLine() != null)
+                    var line = Console.ReadLine();
+
+
+                    if (line == "q")
                         break;
+                    else if(line == "t")
+                    {
+                        if (r2000.IsScanning)
+                            r2000.StopScan();
+                        else
+                            r2000.StartScan();
+                    }
                 }
 
                 r2000.Disconnect();

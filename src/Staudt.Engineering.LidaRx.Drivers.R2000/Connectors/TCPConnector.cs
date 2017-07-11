@@ -67,7 +67,6 @@ namespace Staudt.Engineering.LidaRx.Drivers.R2000.Connectors
             this.observers = new List<IObserver<ScanFramePoint>>();
 
             this.httpClient = httpc;
-            this.tcpClient = new TcpClient();
             this.r2000IpAddress = address;
 
             this.watchdogEnabled = enableWatchdog;
@@ -89,10 +88,13 @@ namespace Staudt.Engineering.LidaRx.Drivers.R2000.Connectors
                             observer.OnCompleted();
 
                     observers.Clear();
-                }
 
-                // TODO: disposal of non-nanaged ressources here
-                // TODO: set fields null if required
+                    if (!cts.IsCancellationRequested)
+                        cts.Cancel();
+                }                
+
+                this.tcpClient?.Dispose();
+                this.ReceivedBuffers = null;
 
                 disposedValue = true;
             }
@@ -107,11 +109,14 @@ namespace Staudt.Engineering.LidaRx.Drivers.R2000.Connectors
         #region IR2000Connector
         public async Task StartAsync()
         {
-            await sem.WaitAsync();
-
             // we're already running
             if (running)
                 return;
+
+            await sem.WaitAsync();
+
+            // create a new tcp client
+            this.tcpClient = new TcpClient();
 
             // request new handle
             var requestBuild = new StringBuilder();
@@ -236,28 +241,37 @@ namespace Staudt.Engineering.LidaRx.Drivers.R2000.Connectors
             var stream = tcpClient.GetStream();
             byte[] buff = new byte[tcpClient.ReceiveBufferSize];
 
-            while(stream.CanRead)
+            try
             {
-                if (cts.IsCancellationRequested)
-                    break;
 
-                // read some chars
-                var count = await stream.ReadAsync(buff, 0, (int)tcpClient.ReceiveBufferSize);
-
-                // we need (at least) a full header
-                if (count < Marshal.SizeOf<ScanFrameHeader>())
+                while (stream.CanRead)
                 {
-                    await Task.Delay(1);
-                    continue;
-                }
-                else
-                {
-                    var slice = new byte[count];
-                    Array.Copy(buff, slice, count);
-                    ReceivedBuffers.Add(slice);
+                    if (cts.IsCancellationRequested)
+                        break;
+
+                    // read some chars
+                    var count = await stream.ReadAsync(buff, 0, (int)tcpClient.ReceiveBufferSize);
+
+                    // we need (at least) a full header
+                    if (count < Marshal.SizeOf<ScanFrameHeader>())
+                    {
+                        await Task.Delay(1);
+                        continue;
+                    }
+                    else
+                    {
+                        var slice = new byte[count];
+                        Array.Copy(buff, slice, count);
+                        ReceivedBuffers.Add(slice);
+                    }
+
+                    Array.Clear(buff, 0, count);
                 }
 
-                Array.Clear(buff, 0, count);
+            }
+            catch(Exception ex)
+            {
+                // TODO
             }
 
             // request cancellation if it's not already done!
@@ -318,9 +332,6 @@ namespace Staudt.Engineering.LidaRx.Drivers.R2000.Connectors
 
             while (tcpClient.Connected)
             {
-                if (cts.IsCancellationRequested)
-                    break;
-
                 var result = await httpClient.GetAsAsync<SetParameterResult>($"feed_watchdog?handle={currentHandle.HandleName}");
 
                 if (result.ErrorCode != R2000ErrorCode.Success)
@@ -328,8 +339,10 @@ namespace Staudt.Engineering.LidaRx.Drivers.R2000.Connectors
                     // todo
                 }
 
-
                 await Task.Delay(feedInterval);
+
+                if (cts.IsCancellationRequested)
+                    break;
             }
 
             // request cancellation if it's not already done!
@@ -337,9 +350,29 @@ namespace Staudt.Engineering.LidaRx.Drivers.R2000.Connectors
                 cts.Cancel();
         }
 
-        public Task StopAsync()
+        public async Task StopAsync()
         {
-            throw new NotImplementedException();
+            await sem.WaitAsync();
+
+            // stop processing
+            if (cts != null && !cts.IsCancellationRequested)
+            {
+                cts.Cancel();
+            }
+
+            if (tcpClient != null)
+            {
+                // dispose and throw away
+                tcpClient.Dispose();
+                tcpClient = null;
+            }
+
+            // "clear" the buffer
+            ReceivedBuffers = new ConcurrentBag<byte[]>();
+
+            this.running = false;
+
+            sem.Release();
         }
         #endregion
 

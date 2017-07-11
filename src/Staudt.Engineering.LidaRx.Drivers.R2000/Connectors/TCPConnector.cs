@@ -126,7 +126,7 @@ namespace Staudt.Engineering.LidaRx.Drivers.R2000.Connectors
 
             // build query to request a new handle
             var requestBuild = new StringBuilder();
-            requestBuild.Append("request_handle_tcp?packet_type=B&start_angle=0");
+            requestBuild.Append("request_handle_tcp?packet_type=C&start_angle=0");
 
             if(watchdogEnabled)
             {
@@ -190,6 +190,8 @@ namespace Staudt.Engineering.LidaRx.Drivers.R2000.Connectors
 
         private async void DispatchData()
         {
+            var headerSize = Marshal.SizeOf<ScanFrameHeader>();
+
             while (!cts.IsCancellationRequested)
             {
                 byte[] buff = null;
@@ -198,6 +200,10 @@ namespace Staudt.Engineering.LidaRx.Drivers.R2000.Connectors
                     await Task.Delay(10);
                 else
                 {
+                    // not a full frame!
+                    if (buff.Length < headerSize)
+                        continue;
+
                     // deserialize the header
                     var header = buff.BytesToStruct<ScanFrameHeader>(0);
 
@@ -205,13 +211,18 @@ namespace Staudt.Engineering.LidaRx.Drivers.R2000.Connectors
                     if (header.Magic != 0xa25c)
                         continue;
 
+                    if ((header.StatusFlags & (1 << 4)) > 0)
+                        Console.WriteLine($"Skipped packets in scan {header.ScanNumber} flags {header.StatusFlags}");
+
                     // unit: 1/10000th of a degree
                     var angle = ((float)header.FirstAngleInThisPacket) / 10000;
                     var angleInc = ((float)header.AnglularIncrement) / 10000;
 
                     var offsetIncrement = (ushort)Marshal.SizeOf<ScanFramePointNative>();
+                    var countPoints = header.NumberOfPointsThisPacket;
+                    var offset = header.HeaderSize;
 
-                    for (var offset = header.HeaderSize; offset < header.PacketSize; offset += offsetIncrement)
+                    for(int idx = 0; idx < countPoints; idx++)
                     {
                         var pointNative = buff.BytesToStruct<ScanFramePointNative>(offset);
 
@@ -222,13 +233,14 @@ namespace Staudt.Engineering.LidaRx.Drivers.R2000.Connectors
                             Angle = angle,
                             ScanCounter = header.ScanNumber
                         };
-                       
+
                         foreach (var o in observers)
                         {
                             o.OnNext(point);
                         }
 
                         angle += angleInc;
+                        offset += offsetIncrement;
                     }
                 }                    
             }
@@ -245,9 +257,6 @@ namespace Staudt.Engineering.LidaRx.Drivers.R2000.Connectors
             }
 
             var stream = tcpClient.GetStream();
-            byte[] buff = new byte[tcpClient.ReceiveBufferSize];
-
-            var headerSize = Marshal.SizeOf<ScanFrameHeader>();
 
             try
             {
@@ -257,23 +266,12 @@ namespace Staudt.Engineering.LidaRx.Drivers.R2000.Connectors
                     if (cts.IsCancellationRequested)
                         break;
 
+                    byte[] buff = new byte[2048];
+
                     // read some chars
-                    var count = await stream.ReadAsync(buff, 0, tcpClient.ReceiveBufferSize);
-
-                    // we need (at least) a full header
-                    if (count < headerSize)
-                    {
-                        await Task.Delay(1);
-                        continue;
-                    }
-                    else
-                    {
-                        var slice = new byte[count];
-                        Array.Copy(buff, 0, slice, 0, count);
-                        ReceivedBuffers.Enqueue(slice);
-
-                        Array.Clear(buff, 0, count);
-                    }
+                    var count = await stream.ReadAsync(buff, 0, buff.Length);
+                    Array.Resize(ref buff, count);
+                    ReceivedBuffers.Enqueue(buff);
                 }
 
             }

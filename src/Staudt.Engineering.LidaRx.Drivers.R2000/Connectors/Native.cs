@@ -53,13 +53,18 @@ namespace Staudt.Engineering.LidaRx.Drivers.R2000.Connectors
     }
 
     /// <summary>
-    /// A "type B" frame
+    /// A "type C" frame
     /// </summary>
     [StructLayout(LayoutKind.Sequential, Pack = 1)]
     public struct ScanFramePointNative
     {
-        public uint Distance;
-        public ushort Amplitude;
+        public uint Data;
+
+        // bit-packed in the lower 20 bits of Data
+        public uint Distance => Data & 0b0000_0000_0000_1111_1111_1111_1111_1111;
+
+        // bit-packed in the upper 12 bits of Data
+        public ushort Amplitude => (ushort)((Data & 0b1111_1111_1111_0000_0000_0000_0000_0000) >> 20);
     }
 
     public struct ScanFramePoint

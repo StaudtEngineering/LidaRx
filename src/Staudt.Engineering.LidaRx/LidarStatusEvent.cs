@@ -25,13 +25,23 @@ using System.Text;
 
 namespace Staudt.Engineering.LidaRx
 {
-    public class LidarErrorEvent : ILidarEvent
+    public enum LidarStatusLevel
     {
-        public string Msg { get; private set; }
+        Debug,
+        Info,
+        Warning,
+        Error
+    }
 
-        public LidarErrorEvent(string msg)
+    public class LidarStatusEvent : ILidarEvent
+    {
+        public string Message { get; private set; }
+        public LidarStatusLevel Level { get; private set; }
+
+        public LidarStatusEvent(string msg, LidarStatusLevel status)
         {
-            this.Msg = msg;
+            this.Message = msg;
+            this.Level = status;
         }
 
     }

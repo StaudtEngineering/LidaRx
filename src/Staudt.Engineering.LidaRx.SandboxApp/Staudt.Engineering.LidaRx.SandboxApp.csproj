@@ -68,6 +68,10 @@
     <None Include="packages.config" />
   </ItemGroup>
   <ItemGroup>
+    <ProjectReference Include="..\Staudt.Engineering.LidaRx.Drivers.R2000\Staudt.Engineering.LidaRx.Drivers.R2000.csproj">
+      <Project>{f9f8b35d-2086-435d-9b5b-348177411900}</Project>
+      <Name>Staudt.Engineering.LidaRx.Drivers.R2000</Name>
+    </ProjectReference>
     <ProjectReference Include="..\Staudt.Engineering.LidaRx.Drivers.Sweep\Staudt.Engineering.LidaRx.Drivers.Sweep.csproj">
       <Project>{af6c7e7e-a7ac-4562-962f-98ecd58b831e}</Project>
       <Name>Staudt.Engineering.LidaRx.Drivers.Sweep</Name>

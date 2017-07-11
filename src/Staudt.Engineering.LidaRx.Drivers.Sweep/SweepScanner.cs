@@ -93,7 +93,7 @@ namespace Staudt.Engineering.LidaRx.Drivers.Sweep
         public SweepScanner(string portName)
         {
             serialPort = new SerialPortStream(portName, 115200, 8, Parity.None, StopBits.One);
-            serialPort.ErrorReceived += (sender, e) => PublishLidarEvent(new LidarErrorEvent(e.ToString()));
+            serialPort.ErrorReceived += (sender, e) => PublishLidarEvent(new LidarStatusEvent(e.ToString(), LidarStatusLevel.Error));
 
             serialPort.ReadTimeout = 500;
             serialPort.WriteTimeout = 500;
@@ -669,7 +669,7 @@ namespace Staudt.Engineering.LidaRx.Drivers.Sweep
                     while (!ChecksumIsValid(potentialFrame));
 
                     this.DiscardedBytes += localDiscardedBytes;
-                    PublishLidarEvent(new LidarErrorEvent($"Checksum error, had to discard {localDiscardedBytes} bytes to recover to a valid read window"));
+                    PublishLidarEvent(new LidarStatusEvent($"Checksum error, had to discard {localDiscardedBytes} bytes to recover to a valid read window", LidarStatusLevel.Warning));
                 }
 
                 buffer = potentialFrame.ToArray();
@@ -680,7 +680,7 @@ namespace Staudt.Engineering.LidaRx.Drivers.Sweep
                 // skip on error packets
                 if ((errorSync & (1 << 1)) == 1)
                 {
-                    PublishLidarEvent(new LidarErrorEvent("Communication error with LIDAR module (Sweep error bit E0)"));
+                    PublishLidarEvent(new LidarStatusEvent("Communication error with LIDAR module (Sweep error bit E0)", LidarStatusLevel.Error));
                     continue;
                 }
 
@@ -706,7 +706,7 @@ namespace Staudt.Engineering.LidaRx.Drivers.Sweep
                     return;
 
                 // propagate the new lidar point through the system
-                var scanPacket = new LidarPoint(carthesianPoint, azimuth, distance, signal, this.ScanCounter);
+                var scanPacket = new LidarPoint(carthesianPoint, azimuth, distance, signal, this.ScanCounter, this);
                 PublishLidarEvent(scanPacket);
             }
         }

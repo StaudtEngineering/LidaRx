@@ -8,6 +8,8 @@ using System.Threading.Tasks;
 using System.Reactive.Linq;
 using System.Reactive;
 using System.Reactive.Subjects;
+using Staudt.Engineering.LidaRx.Drivers.R2000;
+using System.Net;
 
 namespace Staudt.Engineering.LidaRx.SandboxApp
 {
@@ -15,13 +17,88 @@ namespace Staudt.Engineering.LidaRx.SandboxApp
     {
         static void Main(string[] args)
         {
+            //SweepTest();
+
+            using (var r2000 = new R2000Scanner(IPAddress.Parse("192.168.1.214"), R2000ConnectionType.TCPConnection))
+            {
+                r2000.Connect();
+
+
+
+                r2000.SetSamplingRate(R2000SamplingRate._8kHz);
+                r2000.SetScanFrequency(10);
+                r2000.SetSamplingRate(R2000SamplingRate._252kHz);
+
+                r2000.OnlyStatusEvents().Subscribe(ev =>
+                {
+                    var oldColor = Console.ForegroundColor;
+                    Console.ForegroundColor = ConsoleColor.Yellow;
+                    Console.WriteLine($"Event: {ev.Level.ToString()} / {ev.Message}");
+                    Console.ForegroundColor = oldColor;
+                });
+
+                r2000.OfType<R2000Status>().Subscribe(_ =>
+                {
+                    Console.WriteLine($"R2000 status:");
+                    Console.WriteLine($"\tScan Frequency {_.CurrentScanFrequency} Hz");
+                    Console.WriteLine($"\tUptime {_.Uptime} min");
+                    Console.WriteLine($"\tTemperature {_.CurrentTemperature} °C");
+                    Console.WriteLine($"\tSystem load {_.SystemLoad}%");
+                    Console.WriteLine("--------------------------------------------");
+                });
+
+                r2000.OnlyLidarPoints()
+                    .BufferByScan()
+                    .Buffer(TimeSpan.FromSeconds(1))
+                    .Subscribe(x =>
+                    {
+                        Console.WriteLine($"Scans per second: {x.Count}");
+                        //Console.WriteLine($"Got {scan.Count} points for scan {scan.Scan}");
+                    });
+
+                r2000.OnlyLidarPoints()
+                    .Where(x => x.Distance >= 400 && x.Distance <= 1200)
+                    .PointsInAzimuthRange(-45, 45)
+                    .BufferByScan()                          
+                    .Subscribe(x =>
+                    {                        
+                        Console.WriteLine($"Distance: {x.Points.Average(y => y.Distance)}  / points {x.Count}");
+                    });
+
+                r2000.StartScan();
+
+
+                while (true)
+                {
+                    var line = Console.ReadLine();
+
+
+                    if (line == "q")
+                        break;
+                    else if(line == "t")
+                    {
+                        if (r2000.IsScanning)
+                            r2000.StopScan();
+                        else
+                            r2000.StartScan();
+                    }
+                }
+
+                r2000.Disconnect();
+            }
+
+
+        }
+
+        private static void SweepTest()
+        {
             using (var sweep = new SweepScanner("COM3"))
             {
                 sweep.Connect();
                 sweep.SetMotorSpeed(SweepMotorSpeed.Speed10Hz);
                 sweep.SetSampleRate(SweepSampleRate.SampleRate1000);
 
-                sweep.OfType<LidarErrorEvent>().Subscribe(x => Console.WriteLine("Error {0}", x.Msg));
+                sweep.OfType<LidarStatusEvent>().Subscribe(x => Console.WriteLine("Error {0}", x.Message));
 
                 /*
                 sweep.OfType<LidarPoint>().Buffer(TimeSpan.FromMilliseconds(1000)).Subscribe(x =>
@@ -62,49 +139,48 @@ namespace Staudt.Engineering.LidaRx.SandboxApp
 
                     });
 
-                    /*
-                    .SelectMany(x => x.Last().ToList())
-                    .Subscribe(scan =>
-                    {
-                        Console.WriteLine($"Got something in the range / points: {scan.Count} / average distance: {scan.Average(p => p.Distance)}!");
+                /*
+                .SelectMany(x => x.Last().ToList())
+                .Subscribe(scan =>
+                {
+                    Console.WriteLine($"Got something in the range / points: {scan.Count} / average distance: {scan.Average(p => p.Distance)}!");
 
-                        //scan.Buffer(TimeSpan.FromMilliseconds(100)).Where(x => x.Count > 2)
-                    },
-                    onCompleted: () => { },
-                    onError: ex =>
-                    {
-                        // blub 
-                    });//*/
+                    //scan.Buffer(TimeSpan.FromMilliseconds(100)).Where(x => x.Count > 2)
+                },
+                onCompleted: () => { },
+                onError: ex =>
+                {
+                    // blub 
+                });//*/
 
-                    /*
-                    .Where(x => x.Count() > 2)
-                    //.TimeInterval()
-                    //.Where(x => x.Interval.Milliseconds < 500)                    
-                    .Subscribe(_ =>
-                    {
-                        //_
+                /*
+                .Where(x => x.Count() > 2)
+                //.TimeInterval()
+                //.Where(x => x.Interval.Milliseconds < 500)                    
+                .Subscribe(_ =>
+                {
+                    //_
 
-                        //_.Su
+                    //_.Su
 
-                        Console.WriteLine("Got something in the range!");
-                    });
+                    Console.WriteLine("Got something in the range!");
+                });
 
-    */
+*/
                 sweep.StartScan();
 
-                while(sweep.IsScanning)
+                while (sweep.IsScanning)
                 {
-                if (Console.ReadLine() != null)
-                    break;
+                    if (Console.ReadLine() != null)
+                        break;
                 }
                 //ObservableExtensions.Subscribe(sweep, ;
 
-                if(sweep.IsScanning)
+                if (sweep.IsScanning)
                 {
                     sweep.StopScan();
                 }
-            }           
-
+            }
         }
     }
 }

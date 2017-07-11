@@ -45,50 +45,79 @@ namespace Staudt.Engineering.LidaRx
         }
 
         /// <summary>
-        /// Filter for LidarErrorEvents
+        /// Filter for LidarStatusEvents
         /// </summary>
         /// <param name="source"></param>
         /// <returns></returns>
-        public static IObservable<LidarErrorEvent> OnlyErrorEvents(this IObservable<ILidarEvent> source)
+        public static IObservable<LidarStatusEvent> OnlyStatusEvents(this IObservable<ILidarEvent> source)
         {
-            return source.OfType<LidarErrorEvent>();
+            return source.OfType<LidarStatusEvent>();
         }
 
         /// <summary>
-        /// Buffer the points into scans. Introduces a delay of one scan duration
+        /// Filter for LidarStatusEvents with a given LidarStatusLevel
+        /// </summary>
+        /// <param name="source"></param>
+        /// <param name="levelFilter"></param>
+        /// <returns></returns>
+        public static IObservable<LidarStatusEvent> OnlyStatusEvents(this IObservable<ILidarEvent> source, LidarStatusLevel levelFilter)
+        {
+            return source.OfType<LidarStatusEvent>().Where(x => x.Level == levelFilter);
+        }
+
+        /// <summary>
+        /// Helper class
+        /// </summary>
+        class PointByScanBuffer : ConcurrentDictionary<long, List<LidarPoint>>
+        {
+            public long LastScan = -1;
+            public readonly SemaphoreSlim ScanPublishLock = new SemaphoreSlim(1, 1);
+        }
+
+        /// <summary>
+        /// Buffer the points into scans. 
+        /// 
+        /// Note: Introduces a delay of one scan duration
+        /// Note: buffering is done PER scanner, thus you will get packages of points from a single scanner
+        /// 
+        /// Warn: when interrupting scanning the last scan will remain in the buffer and will be delayed 
+        /// until another scan (from a given scanner) comes in. This means that after a scan pause you'll get
+        /// one outdated scan round!
         /// </summary>
         /// <param name="source"></param>
         /// <returns></returns>
         public static IObservable<LidarScan> BufferByScan(this IObservable<LidarPoint> source)
         {
             var scanStream = new Subject<LidarScan>();
-            var bufferCollector = new ConcurrentDictionary<long, List<LidarPoint>>();
-            long lastScan = -1;
-
-            var scanPublishLock = new SemaphoreSlim(1, 1);
+            var bufferCollector = new ConcurrentDictionary<ILidarScanner, PointByScanBuffer>();            
 
             source.Subscribe(x =>
                 {
-                    List<LidarPoint> bufferedList = bufferCollector.GetOrAdd(x.Scan, (k) => new List<LidarPoint>());
+                    var pointBuffer = bufferCollector.GetOrAdd(x.Scanner, (k) => new PointByScanBuffer());
+                    var bufferedList = pointBuffer.GetOrAdd(x.Scan, (k) => new List<LidarPoint>());
                     bufferedList.Add(x);
 
                     // we can publish the last scan as it's completed (júst got a point from n+1)
-                    if (lastScan < x.Scan)
+                    if (pointBuffer.LastScan < x.Scan)
                     {
-                        scanPublishLock.Wait(); // acq. lock
-                        List<LidarPoint> lastScanPoints = null;
+                        pointBuffer.ScanPublishLock.Wait(); // acq. lock
 
-                        if (bufferCollector.TryRemove(lastScan, out lastScanPoints))
+                        if (pointBuffer.LastScan < x.Scan)
                         {
-                            var toPublish = new LidarScan(lastScan, lastScanPoints.AsReadOnly());
-                            scanStream.OnNext(toPublish);
+                            List<LidarPoint> lastScanPoints = null;
+
+                            if (pointBuffer.TryRemove(pointBuffer.LastScan, out lastScanPoints))
+                            {
+                                var toPublish = new LidarScan(pointBuffer.LastScan, lastScanPoints.AsReadOnly());
+                                scanStream.OnNext(toPublish);
+                            }
+
+                            // remember the current scan (we update this no matter if we actually had a
+                            // previous scan to escape our start condition)
+                            pointBuffer.LastScan = x.Scan;
                         }
 
-                        // remember the current scan (we update this no matter if we actually had a
-                        // previous scan to escape our start condition)
-                        lastScan = x.Scan;
-
-                        scanPublishLock.Release();
+                        pointBuffer.ScanPublishLock.Release();
                     }
                 });
 

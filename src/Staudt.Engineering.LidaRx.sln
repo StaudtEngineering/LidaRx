@@ -3,11 +3,13 @@ Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio 15
 VisualStudioVersion = 15.0.26430.14
 MinimumVisualStudioVersion = 10.0.40219.1
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Staudt.Engineering.LidaRx", "Staudt.Engineering.LidaRx\Staudt.Engineering.LidaRx.csproj", "{2EE414AC-A549-48F2-8ADE-2E3FAA9B545D}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Staudt.Engineering.LidaRx", "Staudt.Engineering.LidaRx\Staudt.Engineering.LidaRx.csproj", "{2EE414AC-A549-48F2-8ADE-2E3FAA9B545D}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Staudt.Engineering.LidaRx.Drivers.Sweep", "Staudt.Engineering.LidaRx.Drivers.Sweep\Staudt.Engineering.LidaRx.Drivers.Sweep.csproj", "{AF6C7E7E-A7AC-4562-962F-98ECD58B831E}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Staudt.Engineering.LidaRx.Drivers.Sweep", "Staudt.Engineering.LidaRx.Drivers.Sweep\Staudt.Engineering.LidaRx.Drivers.Sweep.csproj", "{AF6C7E7E-A7AC-4562-962F-98ECD58B831E}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Staudt.Engineering.LidaRx.SandboxApp", "Staudt.Engineering.LidaRx.SandboxApp\Staudt.Engineering.LidaRx.SandboxApp.csproj", "{45953FCB-063D-458B-B19B-22C5B92683B9}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Staudt.Engineering.LidaRx.Drivers.R2000", "Staudt.Engineering.LidaRx.Drivers.R2000\Staudt.Engineering.LidaRx.Drivers.R2000.csproj", "{F9F8B35D-2086-435D-9B5B-348177411900}"
 EndProject
 Global
 	GlobalSection(Performance) = preSolution
@@ -30,8 +32,15 @@ Global
 		{45953FCB-063D-458B-B19B-22C5B92683B9}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{45953FCB-063D-458B-B19B-22C5B92683B9}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{45953FCB-063D-458B-B19B-22C5B92683B9}.Release|Any CPU.Build.0 = Release|Any CPU
+		{F9F8B35D-2086-435D-9B5B-348177411900}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{F9F8B35D-2086-435D-9B5B-348177411900}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{F9F8B35D-2086-435D-9B5B-348177411900}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{F9F8B35D-2086-435D-9B5B-348177411900}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(Performance) = preSolution
+		HasPerformanceSessions = true
 	EndGlobalSection
 EndGlobal

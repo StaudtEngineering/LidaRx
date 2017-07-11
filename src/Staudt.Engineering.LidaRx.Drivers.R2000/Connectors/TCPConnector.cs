@@ -366,6 +366,16 @@ namespace Staudt.Engineering.LidaRx.Drivers.R2000.Connectors
         {
             await sem.WaitAsync();
 
+            if(!running)
+            {
+                sem.Release();
+                return;
+            }
+
+            // stop the scan output and release the handle
+            var stopOutResult = await httpClient.GetAsAsync<R2000ProtocolBaseResponse>($"stop_scanoutput?handle={currentHandle.HandleName}");
+            var releaseHandleResult = await httpClient.GetAsAsync<R2000ProtocolBaseResponse>($"release_handle?handle={currentHandle.HandleName}");
+
             // stop processing
             if (cts != null && !cts.IsCancellationRequested)
             {

@@ -28,6 +28,7 @@ using System.Collections.Generic;
 using System.Net.Http;
 using System.Net.Sockets;
 using System.Text;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Net;
@@ -69,6 +70,7 @@ namespace Staudt.Engineering.LidaRx.Drivers.R2000.Connectors
             R2000ProtocolVersion protocolVersion = R2000ProtocolVersion.v100)
         {
             this.observers = new List<IObserver<ScanFramePoint>>();
+            this.statusObservers = new List<IObserver<LidarStatusEvent>>();
 
             this.httpClient = httpc;
             this.r2000IpAddress = address;
@@ -92,6 +94,12 @@ namespace Staudt.Engineering.LidaRx.Drivers.R2000.Connectors
                             observer.OnCompleted();
 
                     observers.Clear();
+
+                    foreach (var observer in statusObservers.ToArray())
+                        if (statusObservers.Contains(observer))
+                            observer.OnCompleted();
+
+                    statusObservers.Clear();
 
                     if (!cts.IsCancellationRequested)
                         cts.Cancel();
@@ -188,6 +196,20 @@ namespace Staudt.Engineering.LidaRx.Drivers.R2000.Connectors
             sem.Release();
         }
 
+        Dictionary<uint, LidarStatusEvent> errorFlagsWithMessage = new Dictionary<uint, LidarStatusEvent>()
+        {
+            { (1 << 1), new LidarStatusEvent("Scanner sampling rate was modified during this scan", LidarStatusLevel.Info) },
+            { (1 << 2), new LidarStatusEvent("R2000 reported invalid data in frame. Consistency can't be guaranteed!", LidarStatusLevel.Warning) },
+            { (1 << 3), new LidarStatusEvent("R2000 reported unstable rotation", LidarStatusLevel.Warning) },
+            { (1 << 4), new LidarStatusEvent("R2000 reported skipped packet(s). Please check your CPU / Network load and adapt scan frequency and sampling rate accordingly", LidarStatusLevel.Info) },
+            { (1 << 10), new LidarStatusEvent("Device temperature below waring threshold (0 °C)", LidarStatusLevel.Warning) },
+            { (1 << 11), new LidarStatusEvent("Device temperature above waring threshold (80 °C)", LidarStatusLevel.Warning) },
+            { (1 << 12), new LidarStatusEvent("Device CPU is about to over-load", LidarStatusLevel.Warning) },
+            { (1 << 18), new LidarStatusEvent("Device temperature below error threshold (-10 °C)", LidarStatusLevel.Error) },
+            { (1 << 19), new LidarStatusEvent("Device temperature above error threshold (85 °C)", LidarStatusLevel.Error) },
+            { (1 << 20), new LidarStatusEvent("Device CPU overload", LidarStatusLevel.Error) },
+        };
+
         private async void DispatchData()
         {
             var headerSize = Marshal.SizeOf<ScanFrameHeader>();
@@ -211,8 +233,13 @@ namespace Staudt.Engineering.LidaRx.Drivers.R2000.Connectors
                     if (header.Magic != 0xa25c)
                         continue;
 
-                    if ((header.StatusFlags & (1 << 4)) > 0)
-                        Console.WriteLine($"Skipped packets in scan {header.ScanNumber} flags {header.StatusFlags}");
+                    // check for error flags and publish them!
+                    var flagMessages = errorFlagsWithMessage.Where(ft => (header.StatusFlags & ft.Key) > 0).Select(ft => ft.Value);
+
+                    foreach(var msg in flagMessages)
+                        foreach (var o in statusObservers)
+                            o.OnNext(msg);
+      
 
                     // unit: 1/10000th of a degree
                     var angle = ((float)header.FirstAngleInThisPacket) / 10000;
@@ -410,6 +437,16 @@ namespace Staudt.Engineering.LidaRx.Drivers.R2000.Connectors
                 observers.Add(observer);
             return new Unsubscriber<ScanFramePoint>(observers, observer);
         }
+
+        protected List<IObserver<LidarStatusEvent>> statusObservers;
+
+        public IDisposable Subscribe(IObserver<LidarStatusEvent> observer)
+        {
+            if (!statusObservers.Contains(observer))
+                statusObservers.Add(observer);
+            return new Unsubscriber<LidarStatusEvent>(statusObservers, observer);
+        }
+
         #endregion
     }
 

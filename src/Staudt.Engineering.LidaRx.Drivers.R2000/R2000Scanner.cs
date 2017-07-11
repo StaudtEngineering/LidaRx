@@ -88,7 +88,8 @@ namespace Staudt.Engineering.LidaRx.Drivers.R2000
 
             var latestNativeScanCounter = 0;
 
-            this.dataStreamConnector.Subscribe(pt =>
+            // publish the points
+            this.dataStreamConnector.Subscribe<ScanFramePoint>(pt =>
             {
                 // we don't use the native R2000 scan counter at it wraps around quite quickly
                 // thus, we store the "latestNativeCounter" and check for increment or wraparound
@@ -97,6 +98,10 @@ namespace Staudt.Engineering.LidaRx.Drivers.R2000
                     latestNativeScanCounter = pt.ScanCounter;
                     base.ScanCounter++;
                 }
+
+                // don't publish invalid packets
+                if (!pt.Valid)
+                    return;
 
                 var carthCoordinate = base.TransfromScannerToSystemCoordinates(pt.Angle, pt.Distance);
 
@@ -110,6 +115,9 @@ namespace Staudt.Engineering.LidaRx.Drivers.R2000
 
                 PublishLidarEvent(point);
             });
+
+            // redirect the error/status events
+            this.dataStreamConnector.Subscribe<LidarStatusEvent>(ev => this.PublishLidarEvent(ev));
         }
 
         public override void Connect()

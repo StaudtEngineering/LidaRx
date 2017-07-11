@@ -26,8 +26,16 @@ namespace Staudt.Engineering.LidaRx.SandboxApp
 
 
                 r2000.SetSamplingRate(R2000SamplingRate._8kHz);
-                r2000.SetScanFrequency(20);
+                r2000.SetScanFrequency(10);
                 r2000.SetSamplingRate(R2000SamplingRate._252kHz);
+
+                r2000.OnlyStatusEvents().Subscribe(ev =>
+                {
+                    var oldColor = Console.ForegroundColor;
+                    Console.ForegroundColor = ConsoleColor.Yellow;
+                    Console.WriteLine($"Event: {ev.Level.ToString()} / {ev.Message}");
+                    Console.ForegroundColor = oldColor;
+                });
 
                 r2000.OfType<R2000Status>().Subscribe(_ =>
                 {
@@ -41,21 +49,20 @@ namespace Staudt.Engineering.LidaRx.SandboxApp
 
                 r2000.OnlyLidarPoints()
                     .BufferByScan()
-                    .Subscribe(scan =>
+                    .Buffer(TimeSpan.FromSeconds(1))
+                    .Subscribe(x =>
                     {
-                        Console.WriteLine($"Got {scan.Count} points for scan {scan.Scan}");
+                        Console.WriteLine($"Scans per second: {x.Count}");
+                        //Console.WriteLine($"Got {scan.Count} points for scan {scan.Scan}");
                     });
 
                 r2000.OnlyLidarPoints()
-                    .Where(x => x.Distance >= 400 && x.Distance <= 1000)
+                    .Where(x => x.Distance >= 400 && x.Distance <= 1200)
                     .PointsInAzimuthRange(-45, 45)
-                    .BufferByScan()      
-                    //.Buffer(TimeSpan.FromSeconds(1))
+                    .BufferByScan()                          
                     .Subscribe(x =>
-                    {
-                        //Console.WriteLine($"Scans per second: {x.Count}");
+                    {                        
                         Console.WriteLine($"Distance: {x.Points.Average(y => y.Distance)}  / points {x.Count}");
-
                     });
 
                 r2000.StartScan();
@@ -91,7 +98,7 @@ namespace Staudt.Engineering.LidaRx.SandboxApp
                 sweep.SetMotorSpeed(SweepMotorSpeed.Speed10Hz);
                 sweep.SetSampleRate(SweepSampleRate.SampleRate1000);
 
-                sweep.OfType<LidarErrorEvent>().Subscribe(x => Console.WriteLine("Error {0}", x.Msg));
+                sweep.OfType<LidarStatusEvent>().Subscribe(x => Console.WriteLine("Error {0}", x.Message));
 
                 /*
                 sweep.OfType<LidarPoint>().Buffer(TimeSpan.FromMilliseconds(1000)).Subscribe(x =>

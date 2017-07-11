@@ -73,5 +73,8 @@ namespace Staudt.Engineering.LidaRx.Drivers.R2000.Connectors
         public ushort Amplitude;
         public float Angle;
         public ushort ScanCounter;
+
+        // see datasheet 3.4.6
+        public bool Valid => Distance < 0xfffff;
     }
 }

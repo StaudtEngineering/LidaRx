@@ -24,7 +24,10 @@ using System.Threading.Tasks;
 
 namespace Staudt.Engineering.LidaRx.Drivers.R2000.Connectors
 {
-    interface IR2000Connector : IObservable<ScanFramePoint>, IDisposable
+    interface IR2000Connector 
+        : IObservable<ScanFramePoint>,
+        IObservable<LidarStatusEvent>,
+        IDisposable
     {
         Task StartAsync();
         Task StopAsync();

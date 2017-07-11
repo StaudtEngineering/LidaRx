@@ -36,6 +36,10 @@ Supported devices
 Show me some code
 =================
 
+Here's a  simple example using a Scanse.io Sweep sensor. 
+
+Basically the programm connects to the Sweep on `Com1`, set the motor speed to 10Hz and the sample rate to 1kHz.
+
 ```csharp
 using (var sweep = new SweepScanner("COM1"))
 {
@@ -44,19 +48,36 @@ using (var sweep = new SweepScanner("COM1"))
     await sweep.SetSampleRateAsync(SweepSampleRate.SampleRate1000);
 
 	await sweep.StartScanAsync();
+```
 
+...the the programm registers for `LidarStatusEvent` with the `LidarStatusLevel.Error` and logs the
+messages to the console.
+
+```csharp
 	// log errors to the console
 	sweep.OnlyStatusEvents(LidarStatusLevel.Error).Subscribe(ev =>
 	{
 		Console.WriteLine($"Error: {ev.Message}");
 	});
+```
 
+Next, the programm takes the LIDAR point stream and filters away all the points that are outside of the distance
+range 40cm to 100cm (imagine two concentric circles around the scanner; only points between them propagate in the
+resulting `Observable<LidarPoint>` stream)
+
+```csharp
     // using the data stream for multiple subscriptions
     var pointsBetween400and1000mm = sweep
 		.OnlyLidarPoints()					// filter away all those status messages
         .Where(pt => pt.Distance > 400)		// unit is mm
 		.Where(pt => pt.Distance <= 1500);	// unit is mm
+```
 
+Finally we use the restrained stream as source for a Rx `Buffer()` which collects all the points into consecutive
+"1 second long" buffers. In the second part the program uses the `pointsBetween400and1000mm` stream and restricts 
+it further to points in the azimut range of -45 to +45 degree.
+
+```csharp
     // buffer in 1second long samples
     pointsBetween400and1000mm
         .Buffer(TimeSpan.FromSeconds(1000))
@@ -72,7 +93,12 @@ using (var sweep = new SweepScanner("COM1"))
         {
             // write the points to disk?!
         });
+```
 
+This part uses the full stream of `LidarPoint` from the scanner but instead of buffering on a time basis as in
+the code above it buffers by scan (basically per scanner head revolution).
+
+```csharp
     // buffer the lidar points in scans
     sweep.OnlyLidarPoints()
         .BufferByScan()

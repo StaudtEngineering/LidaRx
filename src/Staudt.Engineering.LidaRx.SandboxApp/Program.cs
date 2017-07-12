@@ -17,17 +17,16 @@ namespace Staudt.Engineering.LidaRx.SandboxApp
     {
         static void Main(string[] args)
         {
+            
+
             //SweepTest();
 
             using (var r2000 = new R2000Scanner(IPAddress.Parse("192.168.1.214"), R2000ConnectionType.TCPConnection))
             {
                 r2000.Connect();
-
-
-
                 r2000.SetSamplingRate(R2000SamplingRate._8kHz);
                 r2000.SetScanFrequency(10);
-                r2000.SetSamplingRate(R2000SamplingRate._252kHz);
+                r2000.SetSamplingRate(R2000SamplingRate._180kHz);
 
                 r2000.OnlyStatusEvents().Subscribe(ev =>
                 {
@@ -36,6 +35,7 @@ namespace Staudt.Engineering.LidaRx.SandboxApp
                     Console.WriteLine($"Event: {ev.Level.ToString()} / {ev.Message}");
                     Console.ForegroundColor = oldColor;
                 });
+                
 
                 r2000.OfType<R2000Status>().Subscribe(_ =>
                 {
@@ -47,16 +47,54 @@ namespace Staudt.Engineering.LidaRx.SandboxApp
                     Console.WriteLine("--------------------------------------------");
                 });
 
-                r2000.OnlyLidarPoints()
-                    .BufferByScan()
-                    .Buffer(TimeSpan.FromSeconds(1))
-                    .Subscribe(x =>
-                    {
-                        Console.WriteLine($"Scans per second: {x.Count}");
-                        //Console.WriteLine($"Got {scan.Count} points for scan {scan.Scan}");
-                    });
 
                 r2000.OnlyLidarPoints()
+                    .BufferByScan()
+                    .Subscribe(x =>
+                    {
+                        //Console.WriteLine($"Scans per second: {x.Count}");
+                        Console.WriteLine($"Got {x.Count} points for scan {x.Scan} / Min {x.Points.Min(pt => pt.Azimuth)} :: Max {x.Points.Max(pt => pt.Azimuth)}");
+
+                    });
+
+                        /*
+                        r2000.OnlyLidarPoints()
+                            .BufferByScan()
+                            .Where(x => x.Count < 25200)
+                            .Subscribe(x =>
+                            {
+                                //Console.WriteLine($"Scans per second: {x.Count}");
+                                Console.WriteLine($"Got {x.Count} points for scan {x.Scan} / Min {x.Points.Min(pt => pt.Azimuth)} :: Max {x.Points.Max(pt => pt.Azimuth)}");
+
+                                var gaps = new List<LidarPoint>();
+
+                                LidarPoint lastPoint = x.Points.First();
+                                var expectedIncr = 360f / 25150;
+
+                                foreach(var pt in x.Points.Skip(1))
+                                {
+                                    var diff = pt.Azimuth - lastPoint.Azimuth - expectedIncr;
+
+                                    if (diff > 0)
+                                    {
+                                        gaps.Add(lastPoint);
+                                        gaps.Add(pt);
+                                    }
+
+                                    lastPoint = pt;
+                                }
+
+                                if (gaps.Count > 0)
+                                {
+                                    Console.WriteLine("Gaps: " +
+                                    gaps.Skip(1).Aggregate(
+                                    gaps.First().Azimuth.ToString(),
+                                    (acc, pt) => acc + ", " + pt.Azimuth));
+
+                                }
+                            });*/
+
+                                            r2000.OnlyLidarPoints()
                     .Where(x => x.Distance >= 400 && x.Distance <= 1200)
                     .PointsInAzimuthRange(-45, 45)
                     .BufferByScan()                          
@@ -64,6 +102,7 @@ namespace Staudt.Engineering.LidaRx.SandboxApp
                     {                        
                         Console.WriteLine($"Distance: {x.Points.Average(y => y.Distance)}  / points {x.Count}");
                     });
+                    
 
                 r2000.StartScan();
 
@@ -88,10 +127,63 @@ namespace Staudt.Engineering.LidaRx.SandboxApp
             }
 
 
+
+
         }
 
-        private static void SweepTest()
+        private async static void SweepTest()
         {
+            using (var sweep = new SweepScanner("COM1"))
+            {
+                await sweep.ConnectAsync();
+                await sweep.SetMotorSpeedAsync(SweepMotorSpeed.Speed10Hz);
+                await sweep.SetSampleRateAsync(SweepSampleRate.SampleRate1000);
+
+                await sweep.StartScanAsync();
+
+                // log errors to the console
+                sweep.OnlyStatusEvents(LidarStatusLevel.Error).Subscribe(ev =>
+                {
+                    Console.WriteLine($"Error: {ev.Message}");
+                });
+
+                // using the data stream for multiple subscriptions
+                var pointsBetween400and1000mm = sweep
+                    .OnlyLidarPoints()                  // filter away all those status messages
+                    .Where(pt => pt.Distance > 400)     // unit is mm
+                    .Where(pt => pt.Distance <= 1500);  // unit is mm
+
+                // buffer in 1second long samples
+                pointsBetween400and1000mm
+                    .Buffer(TimeSpan.FromSeconds(1000))
+                    .Subscribe(buffer =>
+                    {
+                        Console.WriteLine($"{buffer.Count} points in [400;1000]mm range per second");
+                    });
+
+                // this narrows down the point stream to points in the -45 to +45 degree range
+                pointsBetween400and1000mm
+                    .PointsInAzimuthRange(-45, 45)
+                    .Subscribe(pt =>
+                    {
+            // write the points to disk?!
+        });
+
+                // buffer the lidar points in scans
+                sweep.OnlyLidarPoints()
+                    .BufferByScan()
+                    .Subscribe(scan =>
+                    {
+                        Console.WriteLine($"Got {scan.Count} points for scan {scan.Scan}");
+                        Console.WriteLine($"Most distant point: {scan.Points.Max(pt => pt.Distance)}mm");
+                        Console.WriteLine($"Closest point: {scan.Points.Min(pt => pt.Distance)}mm");
+                    });
+
+
+                Console.ReadLine();      // wait here 'till user hits the enter key
+                sweep.StopScan();
+            }
+
             using (var sweep = new SweepScanner("COM3"))
             {
                 sweep.Connect();
@@ -111,11 +203,39 @@ namespace Staudt.Engineering.LidaRx.SandboxApp
                 () => Console.WriteLine("On completed"));
                 */
 
+                sweep.OnlyStatusEvents(LidarStatusLevel.Error).Subscribe(ev =>
+                {
+                    Console.WriteLine($"Error: {ev.Message}");
+                });
+
+                // using the data stream for multiple subscriptions
+                var pointsBetween400and1000mm = sweep.OnlyLidarPoints()
+                    .Where(x => x.Distance > 400 && x.Distance <= 1500); // unit is mm
+
+                // buffer in 1second long samples
+                pointsBetween400and1000mm
+                    .Buffer(TimeSpan.FromSeconds(1000))
+                    .Subscribe(buffer =>
+                    {
+                        Console.WriteLine($"{buffer.Count} points in [400;1000]mm range / s");
+                    });
+
+                // this narrows down the point stream to points in the -45 to +45 degree range
+                pointsBetween400and1000mm
+                    .PointsInAzimuthRange(-45, 45)
+                    .Subscribe(pt =>
+                    {
+                        // write the points to disk?!
+                    });
+
+                // buffer the lidar points in scans
                 sweep.OnlyLidarPoints()
                     .BufferByScan()
                     .Subscribe(scan =>
                     {
                         Console.WriteLine($"Got {scan.Count} points for scan {scan.Scan}");
+                        Console.WriteLine($"Most distant point: {scan.Points.Max(pt => pt.Distance)}mm");
+                        Console.WriteLine($"Closest point: {scan.Points.Min(pt => pt.Distance)}mm");
                     });
 
                 sweep.OfType<LidarPoint>()

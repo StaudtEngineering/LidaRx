@@ -38,6 +38,7 @@ using Staudt.Engineering.LidaRx.Drivers.R2000.Exceptions;
 
 namespace Staudt.Engineering.LidaRx.Drivers.R2000.Connectors
 {
+
     class TCPConnector : IR2000Connector
     {
         HttpClient httpClient;
@@ -59,7 +60,7 @@ namespace Staudt.Engineering.LidaRx.Drivers.R2000.Connectors
         Thread receiveData;
         Thread dispatchData;
         CancellationTokenSource cts;
-        BlockingCollection<byte[]> ReceivedBuffers = new BlockingCollection<byte[]>();
+        BlockingCollection<byte> ReceivedBuffers = new BlockingCollection<byte>();
 
         TcpHandleRequestCommandResult currentHandle;
         IPAddress r2000IpAddress;
@@ -214,108 +215,75 @@ namespace Staudt.Engineering.LidaRx.Drivers.R2000.Connectors
 
         private async void DispatchData()
         {
-            var headerSize = Marshal.SizeOf<ScanFrameHeader>();
-
             try
             {
-                // we use this to hold buffer fragments when a frame we processed 
-                // contains an incomplete packet
-                byte[] previousBufferFragment = null;
+                var headerSize = Marshal.SizeOf<ScanFrameHeader>();
+                var headerBuffer = new byte[headerSize];
+                var scanDataBuffer = new byte[16*1024]; // that should be plenty enough / bigger than a jumbo frame
 
                 while (!cts.IsCancellationRequested)
                 {
-                    // BlockedCollection.Take blocks here until something's added!
-                    byte[] rawBuffer = ReceivedBuffers.Take(cts.Token);           
-                    
-                    if(previousBufferFragment != null)
+                    // get a header
+                    for (int i = 0; i < headerSize; i++)
+                        headerBuffer[i] = ReceivedBuffers.Take(cts.Token);
+
+                    // read the header of this frame
+                    var header = headerBuffer.BytesToStruct<ScanFrameHeader>(0);
+
+                    // make sure we have a comprehensible packet
+                    if (header.Magic != 0xa25c)
+                        break;
+
+                    for (int i = 0; i < (int)(header.PacketSize - header.HeaderSize); i++)
+                        scanDataBuffer[i] = ReceivedBuffers.Take(cts.Token);
+
+                    // check for error flags and publish them!
+                    var flagMessages = errorFlagsWithMessage.Where(ft => (header.StatusFlags & ft.Key) > 0).Select(ft => ft.Value);
+
+                    foreach (var msg in flagMessages)
                     {
-                        var oldLength = previousBufferFragment.Length;
-                        var newLength = oldLength + rawBuffer.Length;
-
-                        Array.Resize(ref previousBufferFragment, newLength);
-                        Array.Copy(rawBuffer, 0, previousBufferFragment, oldLength, rawBuffer.Length);
-
-                        rawBuffer = previousBufferFragment;
-                        previousBufferFragment = null;
+                        foreach (var o in statusObservers)
+                        {
+                            o.OnNext(msg);
+                        }
                     }
 
-                    // offset to read multiple packets in a buffer
-                    int packetOffset = 0;
+                    // prepare angle calculation
+                    var angleDir = (header.AnglularIncrement > 0) ? 1 : -1;
+                    var idxStart = header.FirstIndexInThisPacket;
+                    var idxEnd = header.FirstIndexInThisPacket + header.NumberOfPointsThisPacket;
+                    var angleIncrement = 360.00f / header.NumberOfPointsPerScan;
+                    var pointOffset = 0;
 
-                    while(true)
+                    for (int ptIdx = idxStart; ptIdx < idxEnd; ptIdx++)
                     {
-                        if (rawBuffer.Length < headerSize + packetOffset)
-                            break;
+                        // "manual" deserialization as this is a LOT faster than repeatedly calling 
+                        // BytesToStruct<T>() and the whole Marshal.* stuff.
+                        // Type B packets bit-pack the Amplitude and Distance into an uint32
+                        var dataPacket = (uint)(
+                              (scanDataBuffer[pointOffset++] << 24)
+                            + (scanDataBuffer[pointOffset++] << 16)
+                            + (scanDataBuffer[pointOffset++] << 8)
+                            + (scanDataBuffer[pointOffset++]));
 
-                        // read the header of this frame
-                        var header = rawBuffer.BytesToStruct<ScanFrameHeader>(packetOffset);
-
-                        // make sure we have a comprehensible packet
-                        if (header.Magic != 0xa25c)
-                            break;
-
-                        // check if the frame is "complete"
-                        if(rawBuffer.Length < packetOffset + header.PacketSize)
+                        var point = new ScanFramePoint()
                         {
-                            previousBufferFragment = new byte[rawBuffer.Length - packetOffset];
-                            Array.Copy(rawBuffer, packetOffset, previousBufferFragment, 0, previousBufferFragment.Length);
-                            break;
-                        }
+                            // bit-packed in the upper 12 bits of Data
+                            Amplitude = (ushort)((dataPacket & 0b1111_1111_1111_0000_0000_0000_0000_0000) >> 20),
+                            // bit-packed in the lower 20 bits of Data
+                            Distance = (dataPacket & 0b0000_0000_0000_1111_1111_1111_1111_1111),
+                            Angle = startAngle + angleDir * ptIdx * angleIncrement,
+                            ScanCounter = header.ScanNumber
+                        };
 
-                        // check for error flags and publish them!
-                        var flagMessages = errorFlagsWithMessage.Where(ft => (header.StatusFlags & ft.Key) > 0).Select(ft => ft.Value);
-
-                        foreach (var msg in flagMessages)
+                        foreach (var o in observers)
                         {
-                            foreach (var o in statusObservers)
-                            {
-                                o.OnNext(msg);
-                            }
+                            o.OnNext(point);
                         }
-
-                        // prepare angle calculation
-                        var angleDir = (header.AnglularIncrement > 0) ? 1 : -1;
-                        var idxStart = header.FirstIndexInThisPacket;
-                        var idxEnd = header.FirstIndexInThisPacket + header.NumberOfPointsThisPacket;
-                        var angleIncrement = 360.00f / header.NumberOfPointsPerScan;
-                        var pointOffset = header.HeaderSize - 1;
-
-                        for (int ptIdx = idxStart; ptIdx < idxEnd; ptIdx++)
-                        {
-                            // "manual" deserialization as this is a LOT faster than repeatedly calling 
-                            // BytesToStruct<T>() and the whole Marshal.* stuff.
-                            // Type B packets bit-pack the Amplitude and Distance into an uint32
-                            var dataPacket = (uint)(
-                                  (rawBuffer[packetOffset + pointOffset++] << 24)
-                                + (rawBuffer[packetOffset + pointOffset++] << 16)
-                                + (rawBuffer[packetOffset + pointOffset++] << 8)
-                                + (rawBuffer[packetOffset + pointOffset++]));
-
-                            var point = new ScanFramePoint()
-                            {
-                                // bit-packed in the upper 12 bits of Data
-                                Amplitude = (ushort)((dataPacket & 0b1111_1111_1111_0000_0000_0000_0000_0000) >> 20),
-                                // bit-packed in the lower 20 bits of Data
-                                Distance = (dataPacket & 0b0000_0000_0000_1111_1111_1111_1111_1111),
-                                Angle = startAngle + angleDir * ptIdx * angleIncrement,
-                                ScanCounter = header.ScanNumber
-                            };
-
-                            foreach (var o in observers)
-                            {
-                                o.OnNext(point);
-                            }
-                        }
-
-                        // increment the packet offset for the next packet in the buffer
-                        packetOffset += (int)header.PacketSize;
                     }
-                 
-
-                   
                 }
             }
-            catch(OperationCanceledException) {  /* nothing to do */ }
+            catch (OperationCanceledException) {  /* nothing to do */ }
             
             // request cancellation if it's not already done!
             if (!cts.IsCancellationRequested)
@@ -338,18 +306,21 @@ namespace Staudt.Engineering.LidaRx.Drivers.R2000.Connectors
 
             try
             {
+                byte[] buff = new byte[tcpClient.ReceiveBufferSize];
 
                 while (stream.CanRead)
                 {
-                    byte[] buff = new byte[16 * 1024];
-
                     if (cts.IsCancellationRequested)
                         break;
 
                     // read some bytes
                     var count = await stream.ReadAsync(buff, 0, buff.Length, cts.Token);
-                    Array.Resize(ref buff, count);
-                    ReceivedBuffers.Add(buff);
+
+                    // copy the data to our receive buffer
+                    for (int i = 0; i < count; i++)
+                    {
+                        ReceivedBuffers.Add(buff[i]);
+                    }
                 }
             }
             catch (OperationCanceledException) {  /* expected... */ }
@@ -468,7 +439,7 @@ namespace Staudt.Engineering.LidaRx.Drivers.R2000.Connectors
             }
 
             // "clear" the buffer
-            ReceivedBuffers = new BlockingCollection<byte[]>();
+            ReceivedBuffers = new BlockingCollection<byte>();
 
             this.running = false;
 

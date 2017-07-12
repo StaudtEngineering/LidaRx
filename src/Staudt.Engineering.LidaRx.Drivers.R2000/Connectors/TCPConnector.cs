@@ -245,18 +245,27 @@ namespace Staudt.Engineering.LidaRx.Drivers.R2000.Connectors
                     var angle = ((float)header.FirstAngleInThisPacket) / 10000;
                     var angleInc = ((float)header.AnglularIncrement) / 10000;
 
-                    var offsetIncrement = (ushort)Marshal.SizeOf<ScanFramePointNative>();
+                    //var offsetIncrement = (ushort)4;    // 4 bytes == 1 uint32 (type B packet)
                     var countPoints = header.NumberOfPointsThisPacket;
-                    var offset = header.HeaderSize;
+                    var offset = header.HeaderSize - 1;
 
                     for(int idx = 0; idx < countPoints; idx++)
                     {
-                        var pointNative = buff.BytesToStruct<ScanFramePointNative>(offset);
+                        // "manual" deserialization as this is a LOT faster than repeatedly calling 
+                        // BytesToStruct<T>() and the whole Marshal.* stuff.
+                        // Type B packets bit-pack the Amplitude and Distance into an uint32
+                        var dataPacket = (uint)(
+                              (buff[offset++] << 24) 
+                            + (buff[offset++] << 16) 
+                            + (buff[offset++] << 8) 
+                            + (buff[offset++]));
 
                         var point = new ScanFramePoint()
                         {
-                            Amplitude = pointNative.Amplitude,
-                            Distance = pointNative.Distance,
+                            // bit-packed in the upper 12 bits of Data
+                            Amplitude = (ushort)((dataPacket & 0b1111_1111_1111_0000_0000_0000_0000_0000) >> 20),
+                            // bit-packed in the lower 20 bits of Data
+                            Distance = (dataPacket & 0b0000_0000_0000_1111_1111_1111_1111_1111),
                             Angle = angle,
                             ScanCounter = header.ScanNumber
                         };
@@ -267,7 +276,7 @@ namespace Staudt.Engineering.LidaRx.Drivers.R2000.Connectors
                         }
 
                         angle += angleInc;
-                        offset += offsetIncrement;
+                        //offset += offsetIncrement;
                     }
                 }                    
             }

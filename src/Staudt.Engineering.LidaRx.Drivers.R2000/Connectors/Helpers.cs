@@ -46,6 +46,17 @@ namespace Staudt.Engineering.LidaRx.Drivers.R2000.Connectors
         }
     }
 
+    public struct ScanFramePoint
+    {
+        public uint Distance;
+        public ushort Amplitude;
+        public float Angle;
+        public ushort ScanCounter;
+
+        // see datasheet 3.4.6
+        public bool Valid => Distance < 0xfffff;
+    }
+
     static class BinaryHelpers
     {
         public static T BytesToStruct<T>(this byte[] bytes, int startOffset) where T : struct

@@ -218,63 +218,101 @@ namespace Staudt.Engineering.LidaRx.Drivers.R2000.Connectors
 
             try
             {
+                // we use this to hold buffer fragments when a frame we processed 
+                // contains an incomplete packet
+                byte[] previousBufferFragment = null;
 
                 while (!cts.IsCancellationRequested)
                 {
                     // BlockedCollection.Take blocks here until something's added!
-                    byte[] buff = ReceivedBuffers.Take(cts.Token);
-
-                    // not a full frame!
-                    if (buff.Length < headerSize)
-                        continue;
-
-                    // deserialize the header
-                    var header = buff.BytesToStruct<ScanFrameHeader>(0);
-
-                    // make sure we have a comprehensible packet
-                    if (header.Magic != 0xa25c)
-                        continue;
-
-                    // check for error flags and publish them!
-                    var flagMessages = errorFlagsWithMessage.Where(ft => (header.StatusFlags & ft.Key) > 0).Select(ft => ft.Value);
-
-                    foreach (var msg in flagMessages)
-                        foreach (var o in statusObservers)
-                            o.OnNext(msg);
-
-                    // prepare angle calculation
-                    var angleDir = (header.AnglularIncrement > 0) ? 1 : -1;
-                    var idxStart = header.FirstIndexInThisPacket;
-                    var idxEnd = header.FirstIndexInThisPacket + header.NumberOfPointsThisPacket;
-                    var angleIncrement = 360.00f / header.NumberOfPointsPerScan;
-                    var offset = header.HeaderSize - 1;
-
-                    for (int ptIdx = idxStart; ptIdx < idxEnd; ptIdx++)
+                    byte[] rawBuffer = ReceivedBuffers.Take(cts.Token);           
+                    
+                    if(previousBufferFragment != null)
                     {
-                        // "manual" deserialization as this is a LOT faster than repeatedly calling 
-                        // BytesToStruct<T>() and the whole Marshal.* stuff.
-                        // Type B packets bit-pack the Amplitude and Distance into an uint32
-                        var dataPacket = (uint)(
-                              (buff[offset++] << 24)
-                            + (buff[offset++] << 16)
-                            + (buff[offset++] << 8)
-                            + (buff[offset++]));
+                        var oldLength = previousBufferFragment.Length;
+                        var newLength = oldLength + rawBuffer.Length;
 
-                        var point = new ScanFramePoint()
-                        {
-                            // bit-packed in the upper 12 bits of Data
-                            Amplitude = (ushort)((dataPacket & 0b1111_1111_1111_0000_0000_0000_0000_0000) >> 20),
-                            // bit-packed in the lower 20 bits of Data
-                            Distance = (dataPacket & 0b0000_0000_0000_1111_1111_1111_1111_1111),
-                            Angle = startAngle + angleDir * ptIdx * angleIncrement,
-                            ScanCounter = header.ScanNumber
-                        };
+                        Array.Resize(ref previousBufferFragment, newLength);
+                        Array.Copy(rawBuffer, 0, previousBufferFragment, oldLength, rawBuffer.Length);
 
-                        foreach (var o in observers)
-                        {
-                            o.OnNext(point);
-                        }
+                        rawBuffer = previousBufferFragment;
+                        previousBufferFragment = null;
                     }
+
+                    // offset to read multiple packets in a buffer
+                    int packetOffset = 0;
+
+                    while(true)
+                    {
+                        if (rawBuffer.Length < headerSize + packetOffset)
+                            break;
+
+                        // read the header of this frame
+                        var header = rawBuffer.BytesToStruct<ScanFrameHeader>(packetOffset);
+
+                        // make sure we have a comprehensible packet
+                        if (header.Magic != 0xa25c)
+                            break;
+
+                        // check if the frame is "complete"
+                        if(rawBuffer.Length < packetOffset + header.PacketSize)
+                        {
+                            previousBufferFragment = new byte[rawBuffer.Length - packetOffset];
+                            Array.Copy(rawBuffer, packetOffset, previousBufferFragment, 0, previousBufferFragment.Length);
+                            break;
+                        }
+
+                        // check for error flags and publish them!
+                        var flagMessages = errorFlagsWithMessage.Where(ft => (header.StatusFlags & ft.Key) > 0).Select(ft => ft.Value);
+
+                        foreach (var msg in flagMessages)
+                        {
+                            foreach (var o in statusObservers)
+                            {
+                                o.OnNext(msg);
+                            }
+                        }
+
+                        // prepare angle calculation
+                        var angleDir = (header.AnglularIncrement > 0) ? 1 : -1;
+                        var idxStart = header.FirstIndexInThisPacket;
+                        var idxEnd = header.FirstIndexInThisPacket + header.NumberOfPointsThisPacket;
+                        var angleIncrement = 360.00f / header.NumberOfPointsPerScan;
+                        var pointOffset = header.HeaderSize - 1;
+
+                        for (int ptIdx = idxStart; ptIdx < idxEnd; ptIdx++)
+                        {
+                            // "manual" deserialization as this is a LOT faster than repeatedly calling 
+                            // BytesToStruct<T>() and the whole Marshal.* stuff.
+                            // Type B packets bit-pack the Amplitude and Distance into an uint32
+                            var dataPacket = (uint)(
+                                  (rawBuffer[packetOffset + pointOffset++] << 24)
+                                + (rawBuffer[packetOffset + pointOffset++] << 16)
+                                + (rawBuffer[packetOffset + pointOffset++] << 8)
+                                + (rawBuffer[packetOffset + pointOffset++]));
+
+                            var point = new ScanFramePoint()
+                            {
+                                // bit-packed in the upper 12 bits of Data
+                                Amplitude = (ushort)((dataPacket & 0b1111_1111_1111_0000_0000_0000_0000_0000) >> 20),
+                                // bit-packed in the lower 20 bits of Data
+                                Distance = (dataPacket & 0b0000_0000_0000_1111_1111_1111_1111_1111),
+                                Angle = startAngle + angleDir * ptIdx * angleIncrement,
+                                ScanCounter = header.ScanNumber
+                            };
+
+                            foreach (var o in observers)
+                            {
+                                o.OnNext(point);
+                            }
+                        }
+
+                        // increment the packet offset for the next packet in the buffer
+                        packetOffset += (int)header.PacketSize;
+                    }
+                 
+
+                   
                 }
             }
             catch(OperationCanceledException) {  /* nothing to do */ }
@@ -303,14 +341,14 @@ namespace Staudt.Engineering.LidaRx.Drivers.R2000.Connectors
 
                 while (stream.CanRead)
                 {
-                    byte[] buff = new byte[2048];
+                    byte[] buff = new byte[16 * 1024];
 
                     if (cts.IsCancellationRequested)
                         break;
 
-                    // read some chars
+                    // read some bytes
                     var count = await stream.ReadAsync(buff, 0, buff.Length, cts.Token);
-                    //rray.Resize(ref buff, count);
+                    Array.Resize(ref buff, count);
                     ReceivedBuffers.Add(buff);
                 }
             }

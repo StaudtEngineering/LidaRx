@@ -59,7 +59,7 @@ namespace Staudt.Engineering.LidaRx.Drivers.R2000.Connectors
         Thread receiveData;
         Thread dispatchData;
         CancellationTokenSource cts;
-        Queue<byte[]> ReceivedBuffers = new Queue<byte[]>();
+        BlockingCollection<byte[]> ReceivedBuffers = new BlockingCollection<byte[]>();
 
         TcpHandleRequestCommandResult currentHandle;
         IPAddress r2000IpAddress;
@@ -216,15 +216,13 @@ namespace Staudt.Engineering.LidaRx.Drivers.R2000.Connectors
         {
             var headerSize = Marshal.SizeOf<ScanFrameHeader>();
 
-            while (!cts.IsCancellationRequested)
+            try
             {
-                byte[] buff = null;
 
-                if (ReceivedBuffers.Count == 0)
-                    await Task.Delay(10);
-                else
+                while (!cts.IsCancellationRequested)
                 {
-                    buff = ReceivedBuffers.Dequeue();
+                    // BlockedCollection.Take blocks here until something's added!
+                    byte[] buff = ReceivedBuffers.Take(cts.Token);
 
                     // not a full frame!
                     if (buff.Length < headerSize)
@@ -240,7 +238,7 @@ namespace Staudt.Engineering.LidaRx.Drivers.R2000.Connectors
                     // check for error flags and publish them!
                     var flagMessages = errorFlagsWithMessage.Where(ft => (header.StatusFlags & ft.Key) > 0).Select(ft => ft.Value);
 
-                    foreach(var msg in flagMessages)
+                    foreach (var msg in flagMessages)
                         foreach (var o in statusObservers)
                             o.OnNext(msg);
 
@@ -251,15 +249,15 @@ namespace Staudt.Engineering.LidaRx.Drivers.R2000.Connectors
                     var angleIncrement = 360.00f / header.NumberOfPointsPerScan;
                     var offset = header.HeaderSize - 1;
 
-                    for(int ptIdx = idxStart; ptIdx < idxEnd; ptIdx++)
+                    for (int ptIdx = idxStart; ptIdx < idxEnd; ptIdx++)
                     {
                         // "manual" deserialization as this is a LOT faster than repeatedly calling 
                         // BytesToStruct<T>() and the whole Marshal.* stuff.
                         // Type B packets bit-pack the Amplitude and Distance into an uint32
                         var dataPacket = (uint)(
-                              (buff[offset++] << 24) 
-                            + (buff[offset++] << 16) 
-                            + (buff[offset++] << 8) 
+                              (buff[offset++] << 24)
+                            + (buff[offset++] << 16)
+                            + (buff[offset++] << 8)
                             + (buff[offset++]));
 
                         var point = new ScanFramePoint()
@@ -275,10 +273,17 @@ namespace Staudt.Engineering.LidaRx.Drivers.R2000.Connectors
                         foreach (var o in observers)
                         {
                             o.OnNext(point);
-                        }                        
+                        }
                     }
-                }                    
+                }
             }
+            catch(OperationCanceledException) {  /* nothing to do */ }
+            
+            // request cancellation if it's not already done!
+            if (!cts.IsCancellationRequested)
+                cts.Cancel();
+
+            running = false;
         }
 
         private async void ReceiveData()
@@ -298,23 +303,20 @@ namespace Staudt.Engineering.LidaRx.Drivers.R2000.Connectors
 
                 while (stream.CanRead)
                 {
+                    byte[] buff = new byte[2048];
+
                     if (cts.IsCancellationRequested)
                         break;
 
-                    byte[] buff = new byte[2048];
-
                     // read some chars
-                    var count = await stream.ReadAsync(buff, 0, buff.Length);
-                    Array.Resize(ref buff, count);
-                    ReceivedBuffers.Enqueue(buff);
+                    var count = await stream.ReadAsync(buff, 0, buff.Length, cts.Token);
+                    //rray.Resize(ref buff, count);
+                    ReceivedBuffers.Add(buff);
                 }
-
             }
-            catch(Exception ex)
-            {
-                // TODO
-            }
-
+            catch (OperationCanceledException) {  /* expected... */ }
+            catch (ObjectDisposedException) { /* can happen on abort */ }
+            
             // request cancellation if it's not already done!
             if (!cts.IsCancellationRequested)
                 cts.Cancel();
@@ -347,7 +349,7 @@ namespace Staudt.Engineering.LidaRx.Drivers.R2000.Connectors
                 if (cts.IsCancellationRequested)
                     break;
 
-                await stream.WriteAsync(feedMessage, 0, feedMessage.Length);
+                await stream.WriteAsync(feedMessage, 0, feedMessage.Length, cts.Token);
                 await Task.Delay(feedInterval);
             }
              
@@ -381,7 +383,10 @@ namespace Staudt.Engineering.LidaRx.Drivers.R2000.Connectors
 
                 if (result.ErrorCode != R2000ErrorCode.Success)
                 {
-                    // todo
+                    var ev = new LidarStatusEvent("Could not feed R2000 data stream watchdog", LidarStatusLevel.Warning);
+
+                    foreach (var o in statusObservers)
+                        o.OnNext(ev);
                 }
 
                 await Task.Delay(feedInterval);
@@ -425,7 +430,7 @@ namespace Staudt.Engineering.LidaRx.Drivers.R2000.Connectors
             }
 
             // "clear" the buffer
-            ReceivedBuffers = new Queue<byte[]>();
+            ReceivedBuffers = new BlockingCollection<byte[]>();
 
             this.running = false;
 

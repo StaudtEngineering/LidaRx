@@ -68,7 +68,7 @@ namespace Staudt.Engineering.LidaRx
         public abstract void Disconnect();
         public abstract Task DisconnectAsync();
 
-        #region Helpers
+#region Helpers
 
         /// <summary>
         /// Translates scanner relative LIDAR coordinates to the true spacial position relative to where
@@ -78,21 +78,30 @@ namespace Staudt.Engineering.LidaRx
         /// <param name="distance"></param>
         protected Vector3 TransfromScannerToSystemCoordinates(float azimuth, float distance)
         {
+            // TODO: look at NETCORE 2's MathF to see if we can speed up
+            // the float math operations below. The perf trace says that
+            // about 20% of TransfromScannerToSystemCoordinates's runtime
+            // is consumed there.
+            //
+            // NOTE: Vector3.Transform is pretty expensive too
             var rad = azimuth * Math.PI / 180;
-            var scannerRelativeX = (float)(distance * Math.Cos(rad));
-            var scannerRelativeY = (float)(distance * Math.Sin(rad));
-
+            var scannerRelativeX = distance * (float)(Math.Cos(rad));
+            var scannerRelativeY = distance * (float)(Math.Sin(rad));
             var vector = new Vector3(scannerRelativeX, scannerRelativeY, 0);
 
-            var translated = this.Position + vector;
-            var rotated = Vector3.Transform(translated, this.Orientation);
+            // translate to scanner position
+            vector = this.Position + vector;
 
-            return rotated;
+            // do some rotation if necessary
+            if(this.Orientation != Quaternion.Identity)
+                vector = Vector3.Transform(vector, this.Orientation);
+
+            return vector;
         }
 
-        #endregion
+#endregion
 
-        #region Base implementation of the Rx stuff
+#region Base implementation of the Rx stuff
 
         /// <summary>
         /// Observers that have subscribed
@@ -132,7 +141,7 @@ namespace Staudt.Engineering.LidaRx
             }
         }
 
-        #region IDisposable Support
+#region IDisposable Support
         private bool disposedValue = false;
         protected virtual void Dispose(bool disposing)
         {
@@ -159,9 +168,9 @@ namespace Staudt.Engineering.LidaRx
         { 
             Dispose(true);
         }
-        #endregion
+#endregion
 
 
-        #endregion
+#endregion
     }
 }

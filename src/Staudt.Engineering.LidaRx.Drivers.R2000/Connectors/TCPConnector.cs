@@ -46,6 +46,8 @@ namespace Staudt.Engineering.LidaRx.Drivers.R2000.Connectors
         bool watchdogEnabled;
         int watchdogTimeout;
 
+        const ushort startAngle = 0;
+
         // Note: need to know this in order to decide which communication channel to use 
         // to reset the watchdog timer. When > 1.01 use the TCP "back channel"
         R2000ProtocolVersion protocolVersion; 
@@ -57,7 +59,7 @@ namespace Staudt.Engineering.LidaRx.Drivers.R2000.Connectors
         Thread receiveData;
         Thread dispatchData;
         CancellationTokenSource cts;
-        ConcurrentQueue<byte[]> ReceivedBuffers = new ConcurrentQueue<byte[]>();
+        Queue<byte[]> ReceivedBuffers = new Queue<byte[]>();
 
         TcpHandleRequestCommandResult currentHandle;
         IPAddress r2000IpAddress;
@@ -134,7 +136,7 @@ namespace Staudt.Engineering.LidaRx.Drivers.R2000.Connectors
 
             // build query to request a new handle
             var requestBuild = new StringBuilder();
-            requestBuild.Append("request_handle_tcp?packet_type=C&start_angle=0");
+            requestBuild.Append($"request_handle_tcp?packet_type=C&start_angle={startAngle}");
 
             if(watchdogEnabled)
             {
@@ -218,10 +220,12 @@ namespace Staudt.Engineering.LidaRx.Drivers.R2000.Connectors
             {
                 byte[] buff = null;
 
-                if (!ReceivedBuffers.TryDequeue(out buff))
+                if (ReceivedBuffers.Count == 0)
                     await Task.Delay(10);
                 else
                 {
+                    buff = ReceivedBuffers.Dequeue();
+
                     // not a full frame!
                     if (buff.Length < headerSize)
                         continue;
@@ -239,17 +243,15 @@ namespace Staudt.Engineering.LidaRx.Drivers.R2000.Connectors
                     foreach(var msg in flagMessages)
                         foreach (var o in statusObservers)
                             o.OnNext(msg);
-      
 
-                    // unit: 1/10000th of a degree
-                    var angle = ((float)header.FirstAngleInThisPacket) / 10000;
-                    var angleInc = ((float)header.AnglularIncrement) / 10000;
-
-                    //var offsetIncrement = (ushort)4;    // 4 bytes == 1 uint32 (type B packet)
-                    var countPoints = header.NumberOfPointsThisPacket;
+                    // prepare angle calculation
+                    var angleDir = (header.AnglularIncrement > 0) ? 1 : -1;
+                    var idxStart = header.FirstIndexInThisPacket;
+                    var idxEnd = header.FirstIndexInThisPacket + header.NumberOfPointsThisPacket;
+                    var angleIncrement = 360.00f / header.NumberOfPointsPerScan;
                     var offset = header.HeaderSize - 1;
 
-                    for(int idx = 0; idx < countPoints; idx++)
+                    for(int ptIdx = idxStart; ptIdx < idxEnd; ptIdx++)
                     {
                         // "manual" deserialization as this is a LOT faster than repeatedly calling 
                         // BytesToStruct<T>() and the whole Marshal.* stuff.
@@ -266,17 +268,14 @@ namespace Staudt.Engineering.LidaRx.Drivers.R2000.Connectors
                             Amplitude = (ushort)((dataPacket & 0b1111_1111_1111_0000_0000_0000_0000_0000) >> 20),
                             // bit-packed in the lower 20 bits of Data
                             Distance = (dataPacket & 0b0000_0000_0000_1111_1111_1111_1111_1111),
-                            Angle = angle,
+                            Angle = startAngle + angleDir * ptIdx * angleIncrement,
                             ScanCounter = header.ScanNumber
                         };
 
                         foreach (var o in observers)
                         {
                             o.OnNext(point);
-                        }
-
-                        angle += angleInc;
-                        //offset += offsetIncrement;
+                        }                        
                     }
                 }                    
             }
@@ -426,7 +425,7 @@ namespace Staudt.Engineering.LidaRx.Drivers.R2000.Connectors
             }
 
             // "clear" the buffer
-            ReceivedBuffers = new ConcurrentQueue<byte[]>();
+            ReceivedBuffers = new Queue<byte[]>();
 
             this.running = false;
 

@@ -2,6 +2,8 @@ Staudt Engineering / lidaRx
 ===========================
 
 [![Build status](https://ci.appveyor.com/api/projects/status/sy2l3c91cvlnd1p6?svg=true)](https://ci.appveyor.com/project/pysco68/lidarx) 
+[![NuGet](https://img.shields.io/nuget/v/Staudt.Engineering.LidaRx.svg)](https://www.nuget.org/packages/Staudt.Engineering.LidaRx/)
+[![NuGet](https://img.shields.io/nuget/vpre/Staudt.Engineering.LidaRx.svg)](https://www.nuget.org/packages/Staudt.Engineering.LidaRx/)
 
 A lightweight but powerful Lidar scanner driver and data processing library for 
 .NET providing support for multiple Lidar scanners and an intuitive way to process 

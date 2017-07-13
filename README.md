@@ -70,7 +70,7 @@ resulting `Observable<LidarPoint>` stream)
     var pointsBetween400and1000mm = sweep
 		.OnlyLidarPoints()					// filter away all those status messages
         .Where(pt => pt.Distance > 400)		// unit is mm
-		.Where(pt => pt.Distance <= 1500);	// unit is mm
+		.Where(pt => pt.Distance <= 1000);	// unit is mm
 ```
 
 Finally we use the restrained stream as source for a Rx `Buffer()` which collects all the points into consecutive

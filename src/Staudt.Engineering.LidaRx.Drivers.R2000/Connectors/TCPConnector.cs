@@ -293,7 +293,14 @@ namespace Staudt.Engineering.LidaRx.Drivers.R2000.Connectors
                     // make sure we have a comprehensible packet
                     if (header.Magic != 0xa25c)
                     {
-                        // log corrupted header
+
+                        var statusMessage = new LidarStatusEvent("Received corrupted header (magic value missmatch)", LidarStatusLevel.Error);
+
+                        foreach (var o in statusObservers)
+                        {
+                            o.OnNext(statusMessage);
+                        }
+
                         continue;
                     }
 
@@ -303,7 +310,13 @@ namespace Staudt.Engineering.LidaRx.Drivers.R2000.Connectors
 
                     if (readCount < expectedBytes)
                     {
-                        // log missing body
+                        var statusMessage = new LidarStatusEvent($"Corrupted data packet (expected {expectedBytes}, read {readCount})", LidarStatusLevel.Error);
+
+                        foreach (var o in statusObservers)
+                        {
+                            o.OnNext(statusMessage);
+                        }
+
                         continue;
                     }
 

@@ -1,6 +1,8 @@
 Staudt Engineering / lidaRx
 ===========================
 
+[![Build status](https://ci.appveyor.com/api/projects/status/sy2l3c91cvlnd1p6?svg=true)](https://ci.appveyor.com/project/pysco68/lidarx) 
+
 A lightweight but powerful Lidar scanner driver and data processing library for 
 .NET providing support for multiple Lidar scanners and an intuitive way to process 
 samples received by the scanner. 
@@ -26,7 +28,10 @@ Features
 		- `BufferByScan`
 - Plus all the power of Rx.NET at your fingertip
 - Fully async
-- Cross plattform: runs on .NET Core too(!)
+- Cross plattform support: 
+	- .NET Standard 1.5 / .NET Core 1.0
+	- .NET Standard 2.0 / .NET Core 2.0
+	- .NET 4.6+ 
 
 Supported devices
 -----------------

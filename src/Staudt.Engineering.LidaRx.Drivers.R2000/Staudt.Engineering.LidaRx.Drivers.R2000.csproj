@@ -1,7 +1,7 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFrameworks>netstandard2.0;net46</TargetFrameworks>
+    <TargetFrameworks>netstandard1.5;netstandard2.0;net46</TargetFrameworks>
     <Authors>Yannic Staudt</Authors>
     <Company>Staudt Engineering</Company>
     <Description>LidaRx driver Pepperl+Fuchs' R2000 Familly LIDAR scanners</Description>
@@ -14,9 +14,12 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Newtonsoft.Json" Version="10.0.3" />
-    <PackageReference Include="System.Numerics.Vectors" Version="4.3.0" />
+    <PackageReference Include="Newtonsoft.Json" Version="10.0.3" />    
     <PackageReference Include="System.Reactive" Version="3.1.1" />
+  </ItemGroup>
+
+  <ItemGroup Condition="'$(TargetFramework)'=='netstandard1.5' OR '$(TargetFramework)'=='netstandard2.0'">    
+    <PackageReference Include="System.Numerics.Vectors" Version="4.3.0" />
     <PackageReference Include="System.Reflection" Version="4.3.0" />
     <PackageReference Include="System.Threading.Thread" Version="4.3.0" />
   </ItemGroup>

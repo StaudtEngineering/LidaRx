@@ -1,7 +1,7 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFrameworks>netstandard2.0;net46</TargetFrameworks>
+    <TargetFrameworks>netstandard1.5;netstandard2.0;net46</TargetFrameworks>
     <Authors>Yannic Staudt</Authors>
     <Company>Staudt Engineering</Company>
     <Description>LidaRx driver for Scanse.io's Sweep LIDAR scanner.</Description>
@@ -15,8 +15,11 @@
 
   <ItemGroup>
     <PackageReference Include="SerialPortStream" Version="2.1.2" />
-    <PackageReference Include="System.Numerics.Vectors" Version="4.3.0" />
     <PackageReference Include="System.Reactive" Version="3.1.1" />
+  </ItemGroup>
+
+  <ItemGroup Condition="'$(TargetFramework)'=='netstandard1.5' OR '$(TargetFramework)'=='netstandard2.0'">
+    <PackageReference Include="System.Numerics.Vectors" Version="4.3.0" />
   </ItemGroup>
 
   <ItemGroup Condition="'$(TargetFramework)'=='net45' OR '$(TargetFramework)'=='net46'">

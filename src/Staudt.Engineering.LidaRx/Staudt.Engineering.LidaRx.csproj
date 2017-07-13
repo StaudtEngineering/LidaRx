@@ -1,7 +1,7 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFrameworks>netstandard2.0;net46</TargetFrameworks>
+    <TargetFrameworks>netstandard1.5;netstandard2.0;net46</TargetFrameworks>
     <Authors>Yannic Staudt</Authors>
     <Company>Staudt Engineering</Company>
     <Description>A lightweight but powerful Lidar scanner processing library for .NET providing 
@@ -12,11 +12,15 @@ support for multiple Lidar scanners.</Description>
     <Copyright>Copyright (c) 2017 Yannic Staudt</Copyright>
     <Version>17.6.1</Version>
     <FileVersion>17.6.1</FileVersion>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="System.Numerics.Vectors" Version="4.3.0" />
     <PackageReference Include="System.Reactive" Version="3.1.1" />
+  </ItemGroup>
+  
+  <ItemGroup Condition="'$(TargetFramework)'=='netstandard1.5' OR '$(TargetFramework)'=='netstandard2.0'">
+    <PackageReference Include="System.Numerics.Vectors" Version="4.3.0" />
   </ItemGroup>
 
   <ItemGroup Condition="'$(TargetFramework)'=='net45' OR '$(TargetFramework)'=='net46'">

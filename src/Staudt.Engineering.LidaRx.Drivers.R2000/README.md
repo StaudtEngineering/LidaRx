@@ -39,7 +39,7 @@ using (var r2000 = new R2000Scanner(address, R2000ConnectionType.TCPConnection))
 {
     r2000.Connect();
     r2000.SetScanFrequency(10);
-    r2000.SetSamplingRate(R2000SamplingRate._252kHz);
+    r2000.SetSamplingRate(R2000SamplingRate._252kHz);	// this is a UHD device
 
 	// write the periodic (every 10s) status response to the console
 	r2000.OfType<R2000Status>().Subscribe(_ =>
@@ -59,6 +59,8 @@ using (var r2000 = new R2000Scanner(address, R2000ConnectionType.TCPConnection))
 			Console.WriteLine($"Got {x.Count} points for scan {x.Scan}");
 		});
 
+	r2000.StartScan();
+
 	Console.ReadLine();      // wait here 'till user hits the enter key
 	sweep.StopScan();
 }
@@ -66,6 +68,35 @@ using (var r2000 = new R2000Scanner(address, R2000ConnectionType.TCPConnection))
 
 > Note: the driver published `R2000Status` `ILidarEvents` periodically. You can register them in the observable stream 
 > as you would with `LidarPoints` or `LidarEvents`:
+
+Performance considerations
+--------------------------
+
+Please consider that the R2000 devices can generate a considerable data throughput (252000 points per scan at 10Hz scan frequency).
+This can lead to congestion especially on lower-power devices (ex. a Raspberry Pi) when not carefully tuning the data processing chain.
+
+The data deserialization generates following load figures (252kHz sampling @ 10Hz):
+
+| System | System load (%) | Note |
+| --- | --- | --- |
+| Dell XPS13 9350 (Core i7-6500U / 16Gb / SSD / HT enabled / Windows 10 Pro / .net 4.7) | <2% |
+| Gigabyte BRIX-BACE-3150 (Intel Celeron N3150 / quad-core @2GHz / 4Gb / SSD / Ubuntu 16.10 / .net core 2.0.0-preview2-25407-01) | ~31% | 
+
+Following code was used for this test:
+
+```csharp
+using (var r2000 = new R2000Scanner(address, R2000ConnectionType.TCPConnection))
+{
+    r2000.Connect();
+    r2000.SetScanFrequency(10);
+    r2000.SetSamplingRate(R2000SamplingRate._252kHz);
+	
+	r2000.StartScan();
+
+	Console.ReadLine();      // wait here 'till user hits the enter key
+	sweep.StopScan();
+}
+```
 
 API
 ---

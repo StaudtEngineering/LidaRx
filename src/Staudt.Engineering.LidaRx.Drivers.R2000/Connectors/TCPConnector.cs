@@ -301,24 +301,17 @@ namespace Staudt.Engineering.LidaRx.Drivers.R2000.Connectors
                             o.OnNext(statusMessage);
                         }
 
+                        // clear the buffer
+                        await stream.ReadAsync(headBuff, 0, tcpClient.ReceiveBufferSize, cts.Token);
                         continue;
                     }
 
                     // now read the frame body
                     var expectedBytes = (int)(header.PacketSize - headerSize);
-                    readCount = await stream.ReadAsync(bodyBuff, 0, expectedBytes, cts.Token);
+                    var readBytes = 0;
 
-                    if (readCount < expectedBytes)
-                    {
-                        var statusMessage = new LidarStatusEvent($"Corrupted data packet (expected {expectedBytes}, read {readCount})", LidarStatusLevel.Error);
-
-                        foreach (var o in statusObservers)
-                        {
-                            o.OnNext(statusMessage);
-                        }
-
-                        continue;
-                    }
+                    while(readBytes < expectedBytes)
+                        readBytes += await stream.ReadAsync(bodyBuff, readBytes, expectedBytes - readBytes, cts.Token);
 
                     // prepare angle calculation
                     var angleDir = (header.AnglularIncrement > 0) ? 1 : -1;

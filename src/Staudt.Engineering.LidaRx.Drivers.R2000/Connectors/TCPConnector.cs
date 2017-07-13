@@ -272,7 +272,8 @@ namespace Staudt.Engineering.LidaRx.Drivers.R2000.Connectors
             var stream = tcpClient.GetStream();
             byte[] headBuff = new byte[tcpClient.ReceiveBufferSize];
             byte[] bodyBuff = new byte[tcpClient.ReceiveBufferSize];
-            int readCount = 0;
+
+            int readBytes = 0, expectedBytes = 0;
 
             try
             {
@@ -282,10 +283,14 @@ namespace Staudt.Engineering.LidaRx.Drivers.R2000.Connectors
                         break;
 
                     // read a header
-                    readCount = await stream.ReadAsync(headBuff, 0, headerSize, cts.Token);
+                    expectedBytes = headerSize;
+                    readBytes = 0;
 
-                    if (readCount < headerSize)
-                        continue;
+                    while (readBytes < expectedBytes)
+                    {
+                        readBytes += await stream.ReadAsync(headBuff, readBytes, expectedBytes - readBytes, cts.Token);
+                        cts.Token.ThrowIfCancellationRequested();
+                    }
 
                     // read the header of this frame
                     var header = headBuff.BytesToStruct<ScanFrameHeader>(0);
@@ -307,11 +312,15 @@ namespace Staudt.Engineering.LidaRx.Drivers.R2000.Connectors
                     }
 
                     // now read the frame body
-                    var expectedBytes = (int)(header.PacketSize - headerSize);
-                    var readBytes = 0;
+                    expectedBytes = (int)(header.PacketSize - headerSize);
+                    readBytes = 0;
 
-                    while(readBytes < expectedBytes)
+                    while (readBytes < expectedBytes)
+                    {
                         readBytes += await stream.ReadAsync(bodyBuff, readBytes, expectedBytes - readBytes, cts.Token);
+                        cts.Token.ThrowIfCancellationRequested();
+                    }
+
 
                     // prepare angle calculation
                     var angleDir = (header.AnglularIncrement > 0) ? 1 : -1;

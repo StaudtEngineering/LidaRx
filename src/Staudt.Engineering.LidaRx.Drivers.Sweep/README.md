@@ -1,14 +1,19 @@
 ﻿LidaRx driver for Scanse.IO Sweep
 =================================
 
-This device driver adds support for Scanse.IO's Sweep scanner to LidaRx. 
+This device driver adds support for [Scanse.IO's Sweep scanner](http://scanse.io/) to LidaRx. 
 
 Features
 --------
 
-- Compatible with Sweep Firmware 1.4
+- Compatible with Sweep Firmware 1.4 (as per datasheet)
 - Stronly typed settings API for motor speed and sample rate
 - Automatically pauses/resumes scan when changing parameters (sample rate and rotation frequency) during scan
+
+Roadmap
+-------
+
+- (Eventually) support upgrading the firmware
 
 API
 ---

@@ -67,8 +67,9 @@ namespace Staudt.Engineering.LidaRx.Drivers.R2000
         /// Create a new R2000Scanner object given the scanner's IP address and 
         /// the connection type used to stream LIDAR data
         /// </summary>
-        /// <param name="address"></param>
-        /// <param name="connectionType"></param>
+        /// <param name="address">IP address of the scanner</param>
+        /// <param name="connectionType">TCP or UDP for data streaming</param>
+        /// <param name="fetchStatusInterval">Interval to fetch the scanner status. Set to 0 to disable</param>
         public R2000Scanner(IPAddress address, R2000ConnectionType connectionType, int fetchStatusInterval = 10000)
         {
             this.fetchStatusInterval = fetchStatusInterval;
@@ -139,10 +140,13 @@ namespace Staudt.Engineering.LidaRx.Drivers.R2000
             this.EthernetConfiguration = await FetchConfigObject<EthernetConfigurationInformation>();
             this.MeasurementConfiguration = await FetchConfigObject<MeasuringConfigurationInformation>();
 
-            // start the periodical fetching ;)
-            this.fetchStatusCts = new CancellationTokenSource();
-            this.fetchStatusThread = new Thread(ThreadFetchStatusPeriodically);
-            this.fetchStatusThread.Start();
+            // start the periodical fetching if required
+            if (fetchStatusInterval > 0)
+            {
+                this.fetchStatusCts = new CancellationTokenSource();
+                this.fetchStatusThread = new Thread(ThreadFetchStatusPeriodically);
+                this.fetchStatusThread.Start();
+            }
 
             // Note: well... yes this is somewhat stupid, but hey(!) we managed to talk with
             // the R2000, so everything's fine and dandy
@@ -204,21 +208,44 @@ namespace Staudt.Engineering.LidaRx.Drivers.R2000
                 if (fetchStatusCts.IsCancellationRequested)
                     break;
 
-                // fetch and publish the status
-                var status = await FetchConfigObject<R2000Status>();
-
-                if (status.ErrorCode == R2000ErrorCode.Success)
-                {
-                    this.MeasurementConfiguration.CurrentScanFrequency = status.CurrentScanFrequency;
-                    PublishLidarEvent(status);
-                }
-                else throw new R2000ProtocolErrorException(null, "Retrieving R2000 status failed");
+                var status = await FetchScannerStatusAsync();
+                this.MeasurementConfiguration.CurrentScanFrequency = status.CurrentScanFrequency;
+                PublishLidarEvent(status);
 
                 await Task.Delay(fetchStatusInterval);
             }
 
             // not connected any more!
             this.connected = false;
+        }
+
+        /// <summary>
+        /// Retrive the scanner status
+        /// </summary>
+        /// <returns></returns>
+        public async Task<R2000Status> FetchScannerStatusAsync()
+        {
+            if (!Connected)
+                throw new LidaRxStateException("This instance is not yet connected to the R2000 scanner.");
+
+            // fetch and publish the status
+            var status = await FetchConfigObject<R2000Status>();
+
+            if (status.ErrorCode == R2000ErrorCode.Success)
+            {
+                return status;
+            }
+            else
+                throw new R2000ProtocolErrorException(null, "Retrieving R2000 status failed");            
+        }
+
+        /// <summary>
+        /// Retrive the scanner status
+        /// </summary>
+        /// <returns></returns>
+        public R2000Status FetchScannerStatus()
+        {
+            return FetchScannerStatusAsync().Result;
         }
 
         #endregion

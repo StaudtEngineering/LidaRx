@@ -429,7 +429,8 @@ namespace Staudt.Engineering.LidaRx.Drivers.R2000
             }
 
             // build the url
-            var paramEncoded = System.Net.WebUtility.UrlEncode(value.ToString());
+            var jsonValue = JsonConvert.SerializeObject(value);
+            var paramEncoded = System.Net.WebUtility.UrlEncode(jsonValue);
             var request = $"set_parameter?{jsonAttribute.PropertyName}={paramEncoded}";
 
             var result = await commandClient.GetAsAsync<SetParameterResult>(request);

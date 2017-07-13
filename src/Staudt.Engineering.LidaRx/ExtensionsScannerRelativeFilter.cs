@@ -46,11 +46,18 @@ namespace Staudt.Engineering.LidaRx
             azimuthStart = azimuthStart % 360;
             azimuthEnd = azimuthEnd % 360;
 
-            if (azimuthEnd < azimuthStart)
-                throw new ArgumentException("End azimuth must be bigger than start azimuth");
+            if(azimuthStart < 0)
+            {
+                azimuthStart = 360 + azimuthStart;
+            }
 
-            return source.Where(x => x.Azimuth >= azimuthStart)
-                .Where(x => x.Azimuth <= azimuthEnd);
+            if(azimuthEnd < 0)
+            {
+                azimuthEnd = 360 + azimuthEnd;
+            }
+
+
+            return source.Where(x => x.Azimuth >= azimuthStart || x.Azimuth <= azimuthEnd);            
         }
 
         /// <summary>

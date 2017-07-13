@@ -21,8 +21,12 @@ install:
 before_build:
 - appveyor-retry dotnet restore -v Minimal
 build_script:
-- dotnet build -c %CONFIGURATION% --version-suffix %LABEL%
+- dotnet build Staudt.Engineering.LidaRx --no-dependencies -c %CONFIGURATION% --version-suffix %LABEL%
+- dotnet build Staudt.Engineering.LidaRx.Drivers.R2000 --no-dependencies -c %CONFIGURATION% --version-suffix %LABEL%
+- dotnet build Staudt.Engineering.LidaRx.Drivers.Sweep --no-dependencies -c %CONFIGURATION% --version-suffix %LABEL%
 after_build:
-- dotnet pack -c %CONFIGURATION% --version-suffix %LABEL%
+- dotnet pack Staudt.Engineering.LidaRx --no-dependencies -c %CONFIGURATION% --version-suffix %LABEL%
+- dotnet pack Staudt.Engineering.LidaRx.Drivers.R2000 --no-dependencies -c %CONFIGURATION% --version-suffix %LABEL%
+- dotnet pack Staudt.Engineering.LidaRx.Drivers.Sweep --no-dependencies -c %CONFIGURATION% --version-suffix %LABEL%
 artifacts:
 - path: '**\Staudt.Engineering.LidaRx*.nupkg' # find all NuGet packages recursively

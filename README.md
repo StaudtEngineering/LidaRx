@@ -13,16 +13,17 @@ Features
 	- Configurable sensor position and orientation
 	- Sensor position and orientation updatable at runtime (== your sensor can move, scanned coordinates will be transformed accordingly)
 - Vendor agnostic sensor fusion (join data streams from multiple scanners)
-- Unified base API: connect/disconnect, start/stop scanning and simple status information
-- Polar coordinates filters
-	- `PointsInAzimuthRange`
-	- `PointsInDistanceRange`
-	- `RadiusRangeMinDistance`
-	- `RadiusRangeMaxDistance`
-- Carthesian coordinates filters
-	- `PointsInBox`
-- Grouping/Transforming operators
-	- `BufferByScan`
+- Comprehensive API an helpers: [LidaRx readme](src/Staudt.Engineering.LidaRx/README.md)
+	- Unified base API for scanners: connect/disconnect, start/stop scanning and simple status information
+	- Polar coordinates filters
+		- `PointsInAzimuthRange`
+		- `PointsInDistanceRange`
+		- `RadiusRangeMinDistance`
+		- `RadiusRangeMaxDistance`
+	- Carthesian coordinates filters
+		- `PointsInBox`
+	- Grouping/Transforming operators
+		- `BufferByScan`
 - Plus all the power of Rx.NET at your fingertip
 - Fully async
 - Cross plattform: runs on .NET Core too(!)

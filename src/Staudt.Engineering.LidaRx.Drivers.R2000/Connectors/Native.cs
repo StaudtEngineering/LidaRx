@@ -51,4 +51,23 @@ namespace Staudt.Engineering.LidaRx.Drivers.R2000.Connectors
         public uint IQInput;
         public uint IQOverload;
     }
+
+
+    struct ScanFrame
+    {
+        public ScanFrameHeader Header;
+        public ScanFramePoint[] Points;
+    }
+
+    struct ScanFramePoint
+    {
+        public uint Distance;
+        public ushort Amplitude;
+        public float Angle;
+        public ushort ScanCounter;
+
+        // see datasheet 3.4.6
+        public bool Valid => Distance < 0xfffff;
+    }
+
 }

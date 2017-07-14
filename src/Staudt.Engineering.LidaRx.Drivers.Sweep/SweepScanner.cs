@@ -101,25 +101,7 @@ namespace Staudt.Engineering.LidaRx.Drivers.Sweep
 
         public override void Connect()
         {
-            _semaphoreSlimConnect.Wait();
-
-            // already connected
-            if (Connected)
-                return;
-
-            serialPort.Open();
-
-            // make sure we're in a halfway known state...
-            var dxCommand = new StopDataAcquisitionCommand();
-            serialPort.Write(dxCommand.Command, 0, dxCommand.Command.Length);
-
-            Thread.Sleep(100);
-            serialPort.DiscardInBuffer();
-
-            WaitForStabilizedMotorSpeed(TimeSpan.FromSeconds(10), throwOnFail: true);
-            UpdateDeviceInfo();
-
-            _semaphoreSlimConnect.Release();
+            ConnectAsync().Wait();
         }
 
         public async override Task ConnectAsync()
@@ -147,19 +129,7 @@ namespace Staudt.Engineering.LidaRx.Drivers.Sweep
 
         public override void Disconnect()
         {
-            _semaphoreSlimConnect.Wait();
-
-            if(Connected)
-            {
-                // make sure we're in a halfway known state...
-                var dxCommand = new StopDataAcquisitionCommand();
-                SimpleCommandTxRx(dxCommand);
-
-                // close the serial port
-                serialPort.Close();
-            }            
-
-            _semaphoreSlimConnect.Release();
+            DisconnectAsync().Wait();
         }
 
         public async override Task DisconnectAsync()
@@ -181,21 +151,7 @@ namespace Staudt.Engineering.LidaRx.Drivers.Sweep
 
         public override void StartScan()
         {
-            if (!Connected)
-                throw new LidaRxStateException("This instance is not yet connected to the Sweep scanner.");
-
-            _semaphoreSlimScanStart.Wait();
-
-            if (IsScanning)
-                return;
-
-            var startScanCommand = new StartDataAcquisitionCommand();
-            SimpleCommandTxRx(startScanCommand);
-
-            if (startScanCommand.Success == true)
-                StartScanThreadsInternal();
-
-            _semaphoreSlimScanStart.Release();
+            StartScanAsync().Wait();
         }
 
         public async override Task StartScanAsync()
@@ -212,62 +168,36 @@ namespace Staudt.Engineering.LidaRx.Drivers.Sweep
             await SimpleCommandTxRxAsync(startScanCommand);
 
             if (startScanCommand.Success == true)
-                StartScanThreadsInternal();
+            {
+                this._isScanning = true;
+
+                this.scanProcessingCts = new CancellationTokenSource();
+
+                var serialPollThread = new Thread(PollSerialPort);
+                this.scanProcessingThreads.Add(serialPollThread);
+
+                var processingThread = new Thread(ProcessLidarScanFrames);
+                this.scanProcessingThreads.Add(processingThread);
+
+                serialPollThread.Start();
+                processingThread.Start();
+            }
 
             _semaphoreSlimScanStart.Release();
         }
 
-        private void StartScanThreadsInternal()
-        {
-            this._isScanning = true;
-
-            this.scanProcessingCts = new CancellationTokenSource();
-
-            var serialPollThread = new Thread(PollSerialPort);
-            this.scanProcessingThreads.Add(serialPollThread);
-
-            var processingThread = new Thread(ProcessLidarScanFrames);
-            this.scanProcessingThreads.Add(processingThread);
-
-            serialPollThread.Start();
-            processingThread.Start();
-        }
-
         public override void StopScan()
         {
-            // send a stop command to sweep
-            var cmd = new StopDataAcquisitionCommand();
-            serialPort.Write(cmd.Command, 0, cmd.Command.Length);
-
-            // stop the threads
-            scanProcessingCts.Cancel();
-
-            // wait for termination
-            while (this.scanProcessingThreads.Any(x => x.IsAlive))
-            {
-                Thread.Sleep(1);
-            } 
-
-            this.scanProcessingThreads.Clear();
-            this.rxScanBuffer.Clear();
-
-            // throwaway stuff in the RX buffer!
-            Thread.Sleep(1);
-            serialPort.DiscardInBuffer();
-
-            // send a second DX command
-            serialPort.Write(cmd.Command, 0, cmd.Command.Length);
-
-            // throwaway stuff in the RX buffer!
-            Thread.Sleep(1);
-            serialPort.DiscardInBuffer();
-
-            
-            this._isScanning = false;
+            StopScanAsync().Wait();
         }
 
         public async override Task StopScanAsync()
         {
+            if (!Connected)
+                throw new LidaRxStateException("This instance is not yet connected to the Sweep scanner.");
+
+            await _semaphoreSlimScanStart.WaitAsync();
+
             // send a stop command to sweep
             var cmd = new StopDataAcquisitionCommand();
             var cmdBytes = cmd.Command.Select(x => (byte)x).ToArray();
@@ -296,6 +226,8 @@ namespace Staudt.Engineering.LidaRx.Drivers.Sweep
             serialPort.DiscardInBuffer();
 
             this._isScanning = false;
+
+            _semaphoreSlimScanStart.Release();
         }
 
         #region Sweep specific interface
@@ -307,43 +239,7 @@ namespace Staudt.Engineering.LidaRx.Drivers.Sweep
         /// <param name="smartInterleave">Automatically pause scanning if necessary to adjust the speed, then resume scanning</param>
         public void SetMotorSpeed(SweepMotorSpeed targetSpeed, bool smartInterleave = true)
         {
-            if (this.Info.MotorSpeed == targetSpeed)
-                return;
-
-            bool restartScanning = _isScanning;
-
-            if (_isScanning && !smartInterleave)
-                throw new InvalidOperationException("Cannot change device configuration while scan is running");
-
-            _semaphoreConfigurationChanges.Wait();
-
-            if (_isScanning)
-            {
-                StopScan();
-
-                // give sweep some time to recover
-                Thread.Sleep(250);
-            }
-
-            var cmd = new AdjustMotorSpeedCommand(targetSpeed);
-            SimpleCommandTxRx(cmd);
-
-            if (cmd.Status == AdjustMotorSpeedResult.Success)
-            {
-                WaitForStabilizedMotorSpeed(TimeSpan.FromSeconds(30));
-                this.Info.MotorSpeed = targetSpeed;
-            }
-            else
-            {
-                throw new SweepProtocolErrorException($"Adjust motor speed command failed with status {cmd.Status}", null);
-            }
-
-            if(restartScanning)
-            {
-                StartScan();
-            }
-
-            _semaphoreConfigurationChanges.Release();
+            SetMotorSpeedAsync(targetSpeed, smartInterleave).Wait();
         }
 
         /// <summary>
@@ -353,6 +249,9 @@ namespace Staudt.Engineering.LidaRx.Drivers.Sweep
         /// <param name="smartInterleave">Automatically pause scanning if necessary to adjust the speed, then resume scanning</param>
         public async Task SetMotorSpeedAsync(SweepMotorSpeed targetSpeed, bool smartInterleave = true)
         {
+            if (!Connected)
+                throw new LidaRxStateException("This instance is not yet connected to the Sweep scanner.");
+
             if (this.Info.MotorSpeed == targetSpeed)
                 return;
 
@@ -397,41 +296,9 @@ namespace Staudt.Engineering.LidaRx.Drivers.Sweep
         /// </summary>
         /// <param name="targetRate"></param>
         /// <param name="smartInterleave">Automatically pause scanning if necessary to adjust the sample rate, then resume scanning</param>
-        public void SetSampleRate(SweepSampleRate targetRate, bool smartInterleave = true)
+        public void SetSamplingRate(SweepSampleRate targetRate, bool smartInterleave = true)
         {
-            bool restartScanning = _isScanning;
-
-            if (_isScanning && !smartInterleave)
-                throw new InvalidOperationException("Cannot change device configuration while scan is running");
-
-            _semaphoreConfigurationChanges.Wait();
-
-            if (_isScanning)
-            {
-                StopScan();
-
-                // give sweep some time to recover
-                Thread.Sleep(250);
-            }
-
-            var cmd = new AdjustSampleRateCommand(targetRate);
-            SimpleCommandTxRx(cmd);
-
-            if(cmd.Status == AdjustSampleRateResult.Success)
-            {
-                this.Info.SampleRate = targetRate;
-            }
-            else
-            {
-                throw new SweepProtocolErrorException($"Adjust sample rate command failed with status {cmd.Status}", null);
-            }
-
-            if (restartScanning)
-            {
-                StartScan();
-            }
-
-            _semaphoreConfigurationChanges.Release();
+            SetSamplingRateAsync(targetRate, smartInterleave).Wait();
         }
 
         /// <summary>
@@ -439,8 +306,11 @@ namespace Staudt.Engineering.LidaRx.Drivers.Sweep
         /// </summary>
         /// <param name="targetRate"></param>
         /// <param name="smartInterleave">Automatically pause scanning if necessary to adjust the sample rate, then resume scanning</param>
-        public async Task SetSampleRateAsync(SweepSampleRate targetRate, bool smartInterleave = true)
+        public async Task SetSamplingRateAsync(SweepSampleRate targetRate, bool smartInterleave = true)
         {
+            if (!Connected)
+                throw new LidaRxStateException("This instance is not yet connected to the Sweep scanner.");
+
             bool restartScanning = _isScanning;
 
             if (_isScanning && !smartInterleave)
@@ -482,6 +352,9 @@ namespace Staudt.Engineering.LidaRx.Drivers.Sweep
         /// <returns></returns>
         public async Task UpdateDeviceInfoAsync()
         {
+            if (!Connected)
+                throw new LidaRxStateException("This instance is not yet connected to the Sweep scanner.");
+
             // gather information about the device
             var idCommand = new DeviceInformationCommand();
             var ivCommand = new VersionInformationCommand();
@@ -497,14 +370,7 @@ namespace Staudt.Engineering.LidaRx.Drivers.Sweep
         /// </summary>
         public void UpdateDeviceInfo()
         {
-            // gather information about the device
-            var idCommand = new DeviceInformationCommand();
-            var ivCommand = new VersionInformationCommand();
-
-            SimpleCommandTxRx(idCommand);
-            SimpleCommandTxRx(ivCommand);
-
-            FillDeviceInfo(idCommand, ivCommand);
+            UpdateDeviceInfoAsync().Wait();
         }
 
         /// <summary>
@@ -515,29 +381,7 @@ namespace Staudt.Engineering.LidaRx.Drivers.Sweep
         /// <returns>True on success</returns>
         public bool WaitForStabilizedMotorSpeed(TimeSpan timeout, bool throwOnFail = true)
         {
-            var mrCommand = new MotorReadyCommand();
-            var limit = DateTime.Now + timeout;
-
-            while (DateTime.Now < limit)
-            {
-                try
-                {
-                    SimpleCommandTxRx(mrCommand);
-
-                    if (mrCommand.DeviceReady == true)
-                        break;
-                }
-                catch { }
-
-                Thread.Sleep(50);
-            }
-
-            if (throwOnFail && mrCommand.DeviceReady == false)
-            {
-                throw new SweepMotorStabilizationTimeoutException(timeout.Seconds);
-            }
-
-            return true;
+            return WaitForStabilizedMotorSpeedAsync(timeout, throwOnFail).Result;
         }
 
         /// <summary>
@@ -548,6 +392,9 @@ namespace Staudt.Engineering.LidaRx.Drivers.Sweep
         /// <returns>True on success</returns>
         public async Task<bool> WaitForStabilizedMotorSpeedAsync(TimeSpan timeout, bool throwOnFail = true)
         {
+            if (!Connected)
+                throw new LidaRxStateException("This instance is not yet connected to the Sweep scanner.");
+
             var mrCommand = new MotorReadyCommand();
             var limit = DateTime.Now + timeout;
 
@@ -741,26 +588,7 @@ namespace Staudt.Engineering.LidaRx.Drivers.Sweep
 
         void SimpleCommandTxRx(ISweepCommand cmd)
         {
-            var buffer = new char[cmd.ExpectedAnswerLength];
-
-            // throwaway stuff in the RX buffer!
-            serialPort.DiscardInBuffer();
-
-            // TX then RX
-            serialPort.Write(cmd.Command, 0, cmd.Command.Length);
-            var bytesRead = serialPort.Read(buffer, 0, cmd.ExpectedAnswerLength);
-
-            if (bytesRead == cmd.ExpectedAnswerLength)
-            {
-                cmd.ProcessResponse(buffer);
-            }
-            else
-            {
-                throw new SweepProtocolErrorException(
-                    $"Answer was {bytesRead} bytes long instead of expected {cmd.ExpectedAnswerLength}",
-                    buffer.Select(x => (char)x).ToArray());
-            }
-            
+            SimpleCommandTxRxAsync(cmd).Wait();
         }
 
         async Task SimpleCommandTxRxAsync(ISweepCommand cmd)
@@ -802,8 +630,11 @@ namespace Staudt.Engineering.LidaRx.Drivers.Sweep
                         StopScan();
                     }
 
-                    serialPort.Flush();
-                    serialPort.Dispose();
+                    if(serialPort.IsOpen)
+                        serialPort.Flush();
+
+                    if(!serialPort.IsDisposed)
+                        serialPort.Dispose();
                 }
 
                 disposedValue = true;

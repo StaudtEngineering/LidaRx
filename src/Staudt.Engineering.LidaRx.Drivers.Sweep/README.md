@@ -1,13 +1,16 @@
 ﻿LidaRx driver for Scanse.IO Sweep
 =================================
 
+[![NuGet](https://img.shields.io/nuget/v/Staudt.Engineering.LidaRx.Drivers.Sweep.svg)](https://www.nuget.org/packages/Staudt.Engineering.LidaRx/)
+[![NuGet](https://img.shields.io/nuget/vpre/Staudt.Engineering.LidaRx.Drivers.Sweep.svg)](https://www.nuget.org/packages/Staudt.Engineering.LidaRx/)
+
 This device driver adds support for [Scanse.IO's Sweep scanner](http://scanse.io/) to LidaRx. 
 
 Features
 --------
 
 - Compatible with Sweep Firmware 1.4 (as per datasheet)
-- Stronly typed settings API for motor speed and sample rate
+- Strongly typed settings API for motor speed and sample rate
 - Automatically pauses/resumes scan when changing parameters (sample rate and rotation frequency) during scan
 
 Roadmap
@@ -56,14 +59,14 @@ API
 | `timeout` | Wait for timeout to elapse before failing |
 | `throwOnFail` | You can suppress the exception throwing by setting this to `false` | `true`
 
-> Note: datasheet states that Sweep takes up to 6s to stabilize. By expirience 10 seconds is the least to wait in many cases.
+> Note: datasheet states that Sweep takes up to 6s to stabilize. By experience 10 seconds is the least to wait in many cases.
 
 #### Sample rate adjustement
 
 | Method |
 | --- |
-| `void SetSampleRate(SweepSampleRate targetRate, bool smartInterleave)` |
-| `async Task SetSampleRateAsync(SweepSampleRate targetRate, bool smartInterleave)` |
+| `void SetSamplingRate(SweepSampleRate targetRate, bool smartInterleave)` |
+| `async Task SetSamplingRateAsync(SweepSampleRate targetRate, bool smartInterleave)` |
 
 | Parameter | Description | Default
 | --- | --- | --- |
@@ -79,7 +82,7 @@ API
 | `async Task UpdateDeviceInfoAsync()` |
 
 Retrieves the device information and version information from connected Sweep scanner. 
-Infomration can be access in the `SweepScanner.Info` property:
+Information can be access in the `SweepScanner.Info` property:
 
 | Property | Type | Description
 | --- | --- | --- |

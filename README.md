@@ -1,7 +1,9 @@
-Staudt Engineering / lidaRx
-===========================
+LidaRx
+======
 
 [![Build status](https://ci.appveyor.com/api/projects/status/sy2l3c91cvlnd1p6?svg=true)](https://ci.appveyor.com/project/pysco68/lidarx) 
+[![NuGet](https://img.shields.io/nuget/v/Staudt.Engineering.LidaRx.svg)](https://www.nuget.org/packages/Staudt.Engineering.LidaRx/)
+[![NuGet](https://img.shields.io/nuget/vpre/Staudt.Engineering.LidaRx.svg)](https://www.nuget.org/packages/Staudt.Engineering.LidaRx/)
 
 A lightweight but powerful Lidar scanner driver and data processing library for 
 .NET providing support for multiple Lidar scanners and an intuitive way to process 
@@ -10,10 +12,10 @@ samples received by the scanner.
 Features
 --------
 
-- Unified data processing
+- Unified data processing with all the power of [Rx.NET](http://reactivex.io/) at your fingertip
 - 3D coordinates 
 	- Configurable sensor position and orientation
-	- Sensor position and orientation updatable at runtime (== your sensor can move, scanned coordinates will be transformed accordingly)
+	- Sensor position and orientation updatable at runtime
 - Vendor agnostic sensor fusion (join data streams from multiple scanners)
 - Comprehensive API an helpers: [LidaRx readme](src/Staudt.Engineering.LidaRx/README.md)
 	- Unified base API for scanners: connect/disconnect, start/stop scanning and simple status information
@@ -22,13 +24,12 @@ Features
 		- `PointsInDistanceRange`
 		- `RadiusRangeMinDistance`
 		- `RadiusRangeMaxDistance`
-	- Carthesian coordinates filters
+	- Cartesian coordinates filters
 		- `PointsInBox`
 	- Grouping/Transforming operators
 		- `BufferByScan`
-- Plus all the power of Rx.NET at your fingertip
 - Fully async
-- Cross plattform support: 
+- Cross platform support: 
 	- .NET Standard 1.5 / .NET Core 1.0
 	- .NET Standard 2.0 / .NET Core 2.0
 	- .NET 4.6+ 
@@ -36,15 +37,17 @@ Features
 Supported devices
 -----------------
 
+These device are officially supported by LidaRx:
+
 - Scanse.io SWEEP [Readme](src/Staudt.Engineering.LidaRx.Drivers.Sweep/README.md)
-- Pepperl+Fuchs OMDxxx-R2000 device familly (HD and UHD) [Readme](src/Staudt.Engineering.LidaRx.Drivers.R2000/README.md)
+- Pepperl+Fuchs OMDxxx-R2000 device family (HD and UHD) [Readme](src/Staudt.Engineering.LidaRx.Drivers.R2000/README.md)
 
 Show me some code!
 ------------------
 
 Here's a  simple example using a Scanse.io Sweep sensor. 
 
-Basically the programm connects to the Sweep on `Com1`, set the motor speed to 10Hz and the sample rate to 1kHz
+Basically the program connects to the Sweep on `Com1`, set the motor speed to 10Hz and the sample rate to 1kHz
 
 ```csharp
 using (var sweep = new SweepScanner("COM1"))
@@ -56,7 +59,7 @@ using (var sweep = new SweepScanner("COM1"))
 	await sweep.StartScanAsync();
 ```
 
-...then the programm registers for `LidarStatusEvent` with the `LidarStatusLevel.Error` and logs the
+...then the program registers for `LidarStatusEvent` with the `LidarStatusLevel.Error` and logs the
 messages to the console.
 
 ```csharp
@@ -67,7 +70,7 @@ messages to the console.
 	});
 ```
 
-Next, the programm takes the LIDAR point stream and filters away all the points that are outside of the distance
+Next, the program takes the LIDAR point stream and filters away all the points that are outside of the distance
 range 40cm to 100cm (imagine two concentric circles around the scanner; only points between them propagate in the
 resulting `Observable<LidarPoint>` stream)
 
@@ -81,7 +84,7 @@ resulting `Observable<LidarPoint>` stream)
 
 Finally we use the restrained stream as source for a Rx `Buffer()` which collects all the points into consecutive
 "1 second long" buffers. In the second part the program uses the `pointsBetween400and1000mm` stream and restricts 
-it further to points in the azimut range of -45 to +45 degree.
+it further to points in the azimuth range of -45 to +45 degree.
 
 ```csharp
     // buffer in 1second long samples
@@ -124,22 +127,22 @@ the code above it buffers by scan (basically per scanner head revolution).
 Roadmap
 -------
 
-- Usable implementation of 3D colision test (think of `PointsIn3DModel(string pathToStlFile)` )
+- Usable implementation of 3D collision test (think of `PointsIn3DModel(string pathToStlFile)` )
 - Points to object matching
-- Point agglomeration tracking 
+- Point and motion tracking  
 
 License
 -------
 
-lidaRx is dual licenced. Unless you've made a separate licence agreement with Staudt 
+lidaRx is dual licensed. Unless you've made a separate licence agreement with Staudt 
 Engineering (for example because you can't stand the LGPL / use contact form on 
 http://www.staudt-engineering.com) you can use lidaRx under the GNU Lesser General 
-Public License v3.0. The full licence text is available in this repository: [LICENCE](LICENCE)
+Public License v3.0. The full licence text is available in this repository: [LICENSE](LICENSE)
 
 Support & Contribution
 ----------------------
 
-Commercial support and device driver developement service is available, support
+Commercial support and device driver development service is available, support
 for open source usage is limited on a "free time available" basis, but please 
 feel free to open issues or pull requests if you can think of something that
 would make this library more awesome :)

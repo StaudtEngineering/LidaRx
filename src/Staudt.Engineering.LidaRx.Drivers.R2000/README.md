@@ -1,18 +1,21 @@
 ﻿LidaRx driver for Pepperl+Fuchs OMDxxx-R2000 devices
 ====================================================
 
+[![NuGet](https://img.shields.io/nuget/v/Staudt.Engineering.LidaRx.Drivers.R2000.svg)](https://www.nuget.org/packages/Staudt.Engineering.LidaRx/)
+[![NuGet](https://img.shields.io/nuget/vpre/Staudt.Engineering.LidaRx.Drivers.R2000.svg)](https://www.nuget.org/packages/Staudt.Engineering.LidaRx/)
+
 This device driver adds support for Pepperl+Fuchs OMDxxx-R2000 family 2D scanners.
 
 Features
 --------
 
-- Support for Firmwares 0.97+ (PFSDP protocol v1.00 to v1.02) (automatic handling of protocol differences)
+- Support for firmware 0.97+ (PFSDP protocol v1.00 to v1.02) (automatic handling of protocol differences)
 - Support both HD and UHD models
 - TCP wire protocol for data stream
 - Discards invalid data points
 - Driver periodically fetches device status
 - Automatic data stream watchdog reset (driver selects optimal reset method based on firmware version)
-- Stronly typed settings API for motor speed and sample rate (includes validation of supplied parameters)
+- Strongly typed settings API for motor speed and sample rate (includes validation of supplied parameters)
 
 Roadmap
 -------

@@ -30,10 +30,3 @@ after_build:
 - dotnet pack Staudt.Engineering.LidaRx.Drivers.Sweep --no-dependencies -c %CONFIGURATION% --version-suffix %LABEL%
 artifacts:
 - path: '**\Staudt.Engineering.LidaRx*.nupkg' # find all NuGet packages recursively
-deploy:
-- provider: NuGet
-  api_key:
-    secure: vPlXoLcRaQ3ewpPTbaLP4AmmbWpNGlAKC32Ml2sfqAHxAZhlAaZrYKYWcHO08SWS
-  artifact: /.*\.nupkg/
-  on:
-    branch: master

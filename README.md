@@ -52,9 +52,9 @@ Basically the program connects to the Sweep on `Com1`, set the motor speed to 10
 ```csharp
 using (var sweep = new SweepScanner("COM1"))
 {
-    await sweep.ConnectAsync();
-    await sweep.SetMotorSpeedAsync(SweepMotorSpeed.Speed10Hz);
-    await sweep.SetSampleRateAsync(SweepSampleRate.SampleRate1000);
+	await sweep.ConnectAsync();
+	await sweep.SetMotorSpeedAsync(SweepMotorSpeed.Speed10Hz);
+	await sweep.SetSampleRateAsync(SweepSampleRate.SampleRate1000);
 
 	await sweep.StartScanAsync();
 ```
@@ -75,10 +75,10 @@ range 40cm to 100cm (imagine two concentric circles around the scanner; only poi
 resulting `Observable<LidarPoint>` stream)
 
 ```csharp
-    // using the data stream for multiple subscriptions
-    var pointsBetween400and1000mm = sweep
-		.OnlyLidarPoints()					// filter away all those status messages
-        .Where(pt => pt.Distance > 400)		// unit is mm
+	// using the data stream for multiple subscriptions
+	var pointsBetween400and1000mm = sweep
+		.OnlyLidarPoints()		// filter away all those status messages
+		.Where(pt => pt.Distance > 400)		// unit is mm
 		.Where(pt => pt.Distance <= 1000);	// unit is mm
 ```
 
@@ -87,36 +87,36 @@ Finally we use the restrained stream as source for a Rx `Buffer()` which collect
 it further to points in the azimuth range of -45 to +45 degree.
 
 ```csharp
-    // buffer in 1second long samples
-    pointsBetween400and1000mm
-        .Buffer(TimeSpan.FromSeconds(1000))
-        .Subscribe(buffer =>
-        {
-            Console.WriteLine($"{buffer.Count} points in [400;1000]mm range per second");
-        });
+	// buffer in 1second long samples
+	pointsBetween400and1000mm
+		.Buffer(TimeSpan.FromSeconds(1000))
+		.Subscribe(buffer =>
+		{
+			Console.WriteLine($"{buffer.Count} points in [400;1000]mm range per second");
+		});
 
-    // this narrows down the point stream to points in the -45 to +45 degree range
-    pointsBetween400and1000mm
-        .PointsInAzimuthRange(-45, 45)
-        .Subscribe(pt =>
-        {
-            // write the points to disk?!
-        });
+	// this narrows down the point stream to points in the -45 to +45 degree range
+	pointsBetween400and1000mm
+		.PointsInAzimuthRange(-45, 45)
+		.Subscribe(pt =>
+		{
+			// write the points to disk?!
+		});
 ```
 
 This part uses the full stream of `LidarPoint` from the scanner but instead of buffering on a time basis as in
 the code above it buffers by scan (basically per scanner head revolution).
 
 ```csharp
-    // buffer the lidar points in scans
-    sweep.OnlyLidarPoints()
-        .BufferByScan()
-        .Subscribe(scan =>
-        {
-            Console.WriteLine($"Got {scan.Count} points for scan {scan.Scan}");
-            Console.WriteLine($"Most distant point: {scan.Points.Max(pt => pt.Distance)}mm");
-            Console.WriteLine($"Closest point: {scan.Points.Min(pt => pt.Distance)}mm");
-        });
+	// buffer the lidar points in scans
+	sweep.OnlyLidarPoints()
+		.BufferByScan()
+		.Subscribe(scan =>
+		{
+			Console.WriteLine($"Got {scan.Count} points for scan {scan.Scan}");
+			Console.WriteLine($"Most distant point: {scan.Points.Max(pt => pt.Distance)}mm");
+			Console.WriteLine($"Closest point: {scan.Points.Min(pt => pt.Distance)}mm");
+		});
 
 	
 	Console.ReadLine();      // wait here 'till user hits the enter key

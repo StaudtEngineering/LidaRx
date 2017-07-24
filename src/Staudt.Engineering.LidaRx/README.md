@@ -36,65 +36,64 @@ LidarRx provides a few extensions to `IObservable<ILidarEvents>` and `IObservabl
 common tasks.
 
 ```csharp
-/// Get only lidar points out of the event stream
+// Get only lidar points out of the event stream
 IObservable<LidarPoint> OnlyLidarPoints(this IObservable<ILidarEvent> source);
 
-/// Filter for LidarStatusEvents
+// Filter for LidarStatusEvents
 IObservable<LidarStatusEvent> OnlyStatusEvents(this IObservable<ILidarEvent> source);
 
-
-/// Filter for LidarStatusEvents with a given LidarStatusLevel
+// Filter for LidarStatusEvents with a given LidarStatusLevel
 public static IObservable<LidarStatusEvent> OnlyStatusEvents(this IObservable<ILidarEvent> source, LidarStatusLevel levelFilter);
 
-/// Buffer the points into scans. 
-/// 
-/// Note: Introduces a delay of one scan duration
-/// Note: buffering is done PER scanner, thus you will get packages of points from a single scanner
-/// 
-/// Warn: when interrupting scanning the last scan will remain in the buffer and will be delayed 
-/// until another scan (from a given scanner) comes in. This means that after a scan pause you'll get
-/// one outdated scan round!
+// Buffer the points into scans. 
+// 
+// Note: Introduces a delay of one scan duration
+// Note: buffering is done PER scanner, thus you will get packages of points from a single scanner
+// 
+// Warn: when interrupting scanning the last scan will remain in the buffer and will be delayed 
+// until another scan (from a given scanner) comes in. This means that after a scan pause you'll get
+// one outdated scan round!
 public static IObservable<LidarScan> BufferByScan(this IObservable<LidarPoint> source);
 ```
 
 3D geometry filter:
 
 ```csharp        
-/// Only returns points that are in a given regular box in carthesian space
+// Only returns points that are in a given regular box in carthesian space
 public static IObservable<LidarPoint> PointsInBox(this IObservable<LidarPoint> source,
-    Vector3 vertex1,
-    Vector3 vertex2);
+  Vector3 vertex1,
+  Vector3 vertex2);
 ```
 
 Polar / scanner relative coordinates:
 
 ```csharp        
-/// Filter by points in an azimuth range 
-/// Note: handles negative to positive ranges too (ex. -45° to +45°)
+// Filter by points in an azimuth range 
+// Note: handles negative to positive ranges too (ex. -45° to +45°)
 public static IObservable<LidarPoint> PointsInAzimuthRange(
-	this IObservable<LidarPoint> source,
-	float azimuthStart,
-    float azimuthEnd);
+  this IObservable<LidarPoint> source,
+  float azimuthStart,
+  float azimuthEnd);
 
-/// Filter points that are in a distance range (in scanner relative coordinates)
+// Filter points that are in a distance range (in scanner relative coordinates)
 public static IObservable<LidarPoint> PointsInDistanceRange(
-    this IObservable<LidarPoint> source,
-    float distanceMin,
-    float distanceMax);
+  this IObservable<LidarPoint> source,
+  float distanceMin,
+  float distanceMax);
 
-/// Filter for at points closer than minDistance in a (sensor centric)  polar range
+// Filter for at points closer than minDistance in a (sensor centric)  polar range
 public static IObservable<LidarPoint> RadiusRangeMinDistance(
-    this IObservable<LidarPoint> sweep,
-    float azimuthStart,
-    float azimuthEnd,
-    float minDistance);
+  this IObservable<LidarPoint> sweep,
+  float azimuthStart,
+  float azimuthEnd,
+  float minDistance);
 
-/// Filter for at points further than maxDistance in a (sensor centric)  polar range
+// Filter for at points further than maxDistance in a (sensor centric)  polar range
 public static IObservable<LidarPoint> RadiusRangeMaxDistance(
-    this IObservable<LidarPoint> source,
-    float azimuthStart,
-    float azimuthEnd,
-    float maxDistance);
+  this IObservable<LidarPoint> source,
+  float azimuthStart,
+  float azimuthEnd,
+  float maxDistance);
 ```
 
 Implementing device drivers

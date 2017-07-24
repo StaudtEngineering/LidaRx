@@ -86,7 +86,7 @@ Information can be access in the `SweepScanner.Info` property:
 
 | Property | Type | Description
 | --- | --- | --- |
-| Model		| `string` | Should read `Sweep`
+| Model     | `string` | Should read `Sweep`
 | Protocol  | `string` | 
 | FirmwareVersion | `string` | The firmware revision
 | HardwareVersion | `string` | The hardware revision 

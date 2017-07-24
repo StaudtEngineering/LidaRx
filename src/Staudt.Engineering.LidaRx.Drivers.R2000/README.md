@@ -22,13 +22,13 @@ Roadmap
 
 - Implement UDP connector
 - Complete API
-	- HMI configuration
-	- Network configuration
-	- Device control (reboot and factory reset)
-	- Read/Write user notes and user tag
-	- Measuring configuration
-		- Set transmitter mode
-		- Change scan direction
+    - HMI configuration
+    - Network configuration
+    - Device control (reboot and factory reset)
+    - Read/Write user notes and user tag
+    - Measuring configuration
+        - Set transmitter mode
+        - Change scan direction
 - Implement ZeroConf / Bonjour device discovery
 
 Example
@@ -40,32 +40,32 @@ var address = IPAddress.Parse("192.168.1.214");
 
 using (var r2000 = new R2000Scanner(address, R2000ConnectionType.TCPConnection))
 {
-    r2000.Connect();
-    r2000.SetScanFrequency(10);
-    r2000.SetSamplingRate(R2000SamplingRate._252kHz);	// this is a UHD device
+  r2000.Connect();
+  r2000.SetScanFrequency(10);
+  r2000.SetSamplingRate(R2000SamplingRate._252kHz);   // this is a UHD device
 
-	// write the periodic (every 10s) status response to the console
-	r2000.OfType<R2000Status>().Subscribe(_ =>
-	{
-		Console.WriteLine($"R2000 status:");
-		Console.WriteLine($"\tScan Frequency {_.CurrentScanFrequency} Hz");
-		Console.WriteLine($"\tUptime {_.Uptime} min");
-		Console.WriteLine($"\tTemperature {_.CurrentTemperature} °C");
-		Console.WriteLine($"\tSystem load {_.SystemLoad}%");
-		Console.WriteLine("--------------------------------------------");
-	});
+  // write the periodic (every 10s) status response to the console
+  r2000.OfType<R2000Status>().Subscribe(_ =>
+  {
+    Console.WriteLine($"R2000 status:");
+    Console.WriteLine($"\tScan Frequency {_.CurrentScanFrequency} Hz");
+    Console.WriteLine($"\tUptime {_.Uptime} min");
+    Console.WriteLine($"\tTemperature {_.CurrentTemperature} °C");
+    Console.WriteLine($"\tSystem load {_.SystemLoad}%");
+    Console.WriteLine("--------------------------------------------");
+  });
 
-	r2000.OnlyLidarPoints()
-		.BufferByScan()
-		.Subscribe(x =>
-		{		
-			Console.WriteLine($"Got {x.Count} points for scan {x.Scan}");
-		});
+  r2000.OnlyLidarPoints()
+    .BufferByScan()
+    .Subscribe(x =>
+    {         
+      Console.WriteLine($"Got {x.Count} points for scan {x.Scan}");
+    });
 
-	r2000.StartScan();
+  r2000.StartScan();
 
-	Console.ReadLine();      // wait here 'till user hits the enter key
-	sweep.StopScan();
+  Console.ReadLine();      // wait here 'till user hits the enter key
+  sweep.StopScan();
 }
 ```
 
@@ -90,14 +90,14 @@ Following code was used for this test:
 ```csharp
 using (var r2000 = new R2000Scanner(address, R2000ConnectionType.TCPConnection))
 {
-    r2000.Connect();
-    r2000.SetScanFrequency(10);
-    r2000.SetSamplingRate(R2000SamplingRate._252kHz);
-	
-	r2000.StartScan();
+  r2000.Connect();
+  r2000.SetScanFrequency(10);
+  r2000.SetSamplingRate(R2000SamplingRate._252kHz);
+  
+  r2000.StartScan();
 
-	Console.ReadLine();      // wait here 'till user hits the enter key
-	sweep.StopScan();
+  Console.ReadLine();      // wait here 'till user hits the enter key
+  sweep.StopScan();
 }
 ```
 

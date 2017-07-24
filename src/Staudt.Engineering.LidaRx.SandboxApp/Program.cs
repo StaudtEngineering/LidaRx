@@ -137,7 +137,7 @@ namespace Staudt.Engineering.LidaRx.SandboxApp
             {
                 await sweep.ConnectAsync();
                 await sweep.SetMotorSpeedAsync(SweepMotorSpeed.Speed10Hz);
-                await sweep.SetSampleRateAsync(SweepSampleRate.SampleRate1000);
+                await sweep.SetSamplingRateAsync(SweepSampleRate.SampleRate1000);
 
                 await sweep.StartScanAsync();
 
@@ -188,7 +188,7 @@ namespace Staudt.Engineering.LidaRx.SandboxApp
             {
                 sweep.Connect();
                 sweep.SetMotorSpeed(SweepMotorSpeed.Speed10Hz);
-                sweep.SetSampleRate(SweepSampleRate.SampleRate1000);
+                sweep.SetSamplingRate(SweepSampleRate.SampleRate1000);
 
                 sweep.OfType<LidarStatusEvent>().Subscribe(x => Console.WriteLine("Error {0}", x.Message));
 

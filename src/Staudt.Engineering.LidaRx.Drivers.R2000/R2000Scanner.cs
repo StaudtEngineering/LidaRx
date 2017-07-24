@@ -132,13 +132,13 @@ namespace Staudt.Engineering.LidaRx.Drivers.R2000
             if (Connected)
                 return;
 
-            var protocolInfo = await commandClient.GetAsAsync<ProtocolInformation>("get_protocol_info");
+            var protocolInfo = await commandClient.GetAsAsync<ProtocolInformation>("get_protocol_info").ConfigureAwait(false);
             this.instanceProtocolVersion = protocolInfo.GetProtocolVersion();
 
-            this.SensorInformation = await FetchConfigObject<BasicSensorInformation>();
-            this.SensorCapabilities = await FetchConfigObject<SensorCapabilitiesInformation>();
-            this.EthernetConfiguration = await FetchConfigObject<EthernetConfigurationInformation>();
-            this.MeasurementConfiguration = await FetchConfigObject<MeasuringConfigurationInformation>();
+            this.SensorInformation = await FetchConfigObject<BasicSensorInformation>().ConfigureAwait(false);
+            this.SensorCapabilities = await FetchConfigObject<SensorCapabilitiesInformation>().ConfigureAwait(false);
+            this.EthernetConfiguration = await FetchConfigObject<EthernetConfigurationInformation>().ConfigureAwait(false);
+            this.MeasurementConfiguration = await FetchConfigObject<MeasuringConfigurationInformation>().ConfigureAwait(false);
 
             // start the periodical fetching if required
             if (fetchStatusInterval > 0)
@@ -166,7 +166,7 @@ namespace Staudt.Engineering.LidaRx.Drivers.R2000
             fetchStatusCts.Cancel();
 
             if (IsScanning)
-                await StopScanAsync();
+                await StopScanAsync().ConfigureAwait(false);
         }
 
         public override void StartScan()
@@ -177,7 +177,7 @@ namespace Staudt.Engineering.LidaRx.Drivers.R2000
 
         public override async Task StartScanAsync()
         {
-            await this.dataStreamConnector.StartAsync();
+            await this.dataStreamConnector.StartAsync().ConfigureAwait(false);
             isScanning = true;
         }
 
@@ -192,7 +192,7 @@ namespace Staudt.Engineering.LidaRx.Drivers.R2000
         public override async Task StopScanAsync()
         {
             if (IsScanning)
-                await this.dataStreamConnector.StopAsync();
+                await this.dataStreamConnector.StopAsync().ConfigureAwait(false);
 
             isScanning = false;
         }
@@ -208,11 +208,11 @@ namespace Staudt.Engineering.LidaRx.Drivers.R2000
                 if (fetchStatusCts.IsCancellationRequested)
                     break;
 
-                var status = await FetchScannerStatusAsync();
+                var status = await FetchScannerStatusAsync().ConfigureAwait(false);
                 this.MeasurementConfiguration.CurrentScanFrequency = status.CurrentScanFrequency;
                 PublishLidarEvent(status);
 
-                await Task.Delay(fetchStatusInterval);
+                await Task.Delay(fetchStatusInterval).ConfigureAwait(false);
             }
 
             // not connected any more!
@@ -229,7 +229,7 @@ namespace Staudt.Engineering.LidaRx.Drivers.R2000
                 throw new LidaRxStateException("This instance is not yet connected to the R2000 scanner.");
 
             // fetch and publish the status
-            var status = await FetchConfigObject<R2000Status>();
+            var status = await FetchConfigObject<R2000Status>().ConfigureAwait(false);
 
             if (status.ErrorCode == R2000ErrorCode.Success)
             {
@@ -281,7 +281,7 @@ namespace Staudt.Engineering.LidaRx.Drivers.R2000
             }
 
 
-            await SetConfigParameter<MeasuringConfigurationInformation, double>(x => x.ScanFrequency, frequencyHz);
+            await SetConfigParameter<MeasuringConfigurationInformation, double>(x => x.ScanFrequency, frequencyHz).ConfigureAwait(false);
 
             // when it didn't fail...
             this.MeasurementConfiguration.ScanFrequency = frequencyHz;
@@ -352,7 +352,7 @@ namespace Staudt.Engineering.LidaRx.Drivers.R2000
                     + "Please check for valid configurations in the R2000 manual");
 
             // write the config to the R2000
-            await SetConfigParameter<MeasuringConfigurationInformation, uint>(x => x.SamplesPerScan, targetSamplesPerScan);
+            await SetConfigParameter<MeasuringConfigurationInformation, uint>(x => x.SamplesPerScan, targetSamplesPerScan).ConfigureAwait(false);
 
             // reflect the value in the local config
             this.MeasurementConfiguration.SamplesPerScan = targetSamplesPerScan;
@@ -383,7 +383,7 @@ namespace Staudt.Engineering.LidaRx.Drivers.R2000
         private async Task<T> FetchConfigObject<T>()
         {
             var parameters = typeof(T).GetR2000ParametersList(this.instanceProtocolVersion);
-            return await commandClient.GetAsAsync<T>($"get_parameter?list={String.Join(";", parameters)}");
+            return await commandClient.GetAsAsync<T>($"get_parameter?list={String.Join(";", parameters)}").ConfigureAwait(false);
         }
 
         /// <summary>
@@ -433,7 +433,7 @@ namespace Staudt.Engineering.LidaRx.Drivers.R2000
             var paramEncoded = System.Net.WebUtility.UrlEncode(jsonValue);
             var request = $"set_parameter?{jsonAttribute.PropertyName}={paramEncoded}";
 
-            var result = await commandClient.GetAsAsync<SetParameterResult>(request);
+            var result = await commandClient.GetAsAsync<SetParameterResult>(request).ConfigureAwait(false);
 
             if (result.ErrorCode != R2000ErrorCode.Success)
             {

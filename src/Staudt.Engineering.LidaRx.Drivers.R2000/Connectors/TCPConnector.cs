@@ -125,7 +125,7 @@ namespace Staudt.Engineering.LidaRx.Drivers.R2000.Connectors
         #region IR2000Connector
         public async Task StartAsync()
         {
-            await sem.WaitAsync();
+            await sem.WaitAsync().ConfigureAwait(false);
 
             if (running)
             {
@@ -153,7 +153,7 @@ namespace Staudt.Engineering.LidaRx.Drivers.R2000.Connectors
             var requestUrl = requestBuild.ToString();
 
             // get the handle
-            var handle = await httpClient.GetAsAsync<TcpHandleRequestCommandResult>(requestUrl);
+            var handle = await httpClient.GetAsAsync<TcpHandleRequestCommandResult>(requestUrl).ConfigureAwait(false);
 
             if(handle.ErrorCode != R2000ErrorCode.Success)
             {
@@ -184,10 +184,10 @@ namespace Staudt.Engineering.LidaRx.Drivers.R2000.Connectors
             }
 
             // connect
-            await tcpClient.ConnectAsync(this.r2000IpAddress, this.currentHandle.Port);
+            await tcpClient.ConnectAsync(this.r2000IpAddress, this.currentHandle.Port).ConfigureAwait(false);
 
             // start sending stuff
-            var started = await httpClient.GetAsAsync<R2000ProtocolBaseResponse>($"start_scanoutput?handle={currentHandle.HandleName}");
+            var started = await httpClient.GetAsAsync<R2000ProtocolBaseResponse>($"start_scanoutput?handle={currentHandle.HandleName}").ConfigureAwait(false);
 
             if(started.ErrorCode != R2000ErrorCode.Success)
             {
@@ -224,7 +224,7 @@ namespace Staudt.Engineering.LidaRx.Drivers.R2000.Connectors
                 {
                     if (!PointsToDispatch.TryDequeue(out frame))
                     {
-                        await Task.Delay(1);
+                        await Task.Delay(1).ConfigureAwait(false);
                         continue;
                     }
 
@@ -265,7 +265,7 @@ namespace Staudt.Engineering.LidaRx.Drivers.R2000.Connectors
                 if (cts.IsCancellationRequested)
                     break;
 
-                await Task.Delay(10);
+                await Task.Delay(10).ConfigureAwait(false);
             }
 
             var headerSize = Marshal.SizeOf<ScanFrameHeader>();
@@ -288,7 +288,7 @@ namespace Staudt.Engineering.LidaRx.Drivers.R2000.Connectors
 
                     while (readBytes < expectedBytes)
                     {
-                        readBytes += await stream.ReadAsync(headBuff, readBytes, expectedBytes - readBytes, cts.Token);
+                        readBytes += await stream.ReadAsync(headBuff, readBytes, expectedBytes - readBytes, cts.Token).ConfigureAwait(false);
                         cts.Token.ThrowIfCancellationRequested();
                     }
 
@@ -307,7 +307,7 @@ namespace Staudt.Engineering.LidaRx.Drivers.R2000.Connectors
                         }
 
                         // clear the buffer
-                        await stream.ReadAsync(headBuff, 0, tcpClient.ReceiveBufferSize, cts.Token);
+                        await stream.ReadAsync(headBuff, 0, tcpClient.ReceiveBufferSize, cts.Token).ConfigureAwait(false);
                         continue;
                     }
 
@@ -317,7 +317,7 @@ namespace Staudt.Engineering.LidaRx.Drivers.R2000.Connectors
 
                     while (readBytes < expectedBytes)
                     {
-                        readBytes += await stream.ReadAsync(bodyBuff, readBytes, expectedBytes - readBytes, cts.Token);
+                        readBytes += await stream.ReadAsync(bodyBuff, readBytes, expectedBytes - readBytes, cts.Token).ConfigureAwait(false);
                         cts.Token.ThrowIfCancellationRequested();
                     }
 
@@ -377,7 +377,7 @@ namespace Staudt.Engineering.LidaRx.Drivers.R2000.Connectors
                 if (cts.IsCancellationRequested)
                     break;
 
-                await Task.Delay(10);
+                await Task.Delay(10).ConfigureAwait(false);
             }
 
             var stream = tcpClient.GetStream();
@@ -394,8 +394,8 @@ namespace Staudt.Engineering.LidaRx.Drivers.R2000.Connectors
                 if (cts.IsCancellationRequested)
                     break;
 
-                await stream.WriteAsync(feedMessage, 0, feedMessage.Length, cts.Token);
-                await Task.Delay(feedInterval);
+                await stream.WriteAsync(feedMessage, 0, feedMessage.Length, cts.Token).ConfigureAwait(false);
+                await Task.Delay(feedInterval).ConfigureAwait(false);
             }
              
             // request cancellation if it's not already done!
@@ -413,7 +413,7 @@ namespace Staudt.Engineering.LidaRx.Drivers.R2000.Connectors
                 if (cts.IsCancellationRequested)
                     break;
 
-                await Task.Delay(10);
+                await Task.Delay(10).ConfigureAwait(false);
             }
 
             var feedInterval = this.watchdogTimeout / 4;
@@ -424,7 +424,7 @@ namespace Staudt.Engineering.LidaRx.Drivers.R2000.Connectors
 
             while (tcpClient.Connected)
             {
-                var result = await httpClient.GetAsAsync<SetParameterResult>($"feed_watchdog?handle={currentHandle.HandleName}");
+                var result = await httpClient.GetAsAsync<SetParameterResult>($"feed_watchdog?handle={currentHandle.HandleName}").ConfigureAwait(false);
 
                 if (result.ErrorCode != R2000ErrorCode.Success)
                 {
@@ -434,7 +434,7 @@ namespace Staudt.Engineering.LidaRx.Drivers.R2000.Connectors
                         o.OnNext(ev);
                 }
 
-                await Task.Delay(feedInterval);
+                await Task.Delay(feedInterval).ConfigureAwait(false);
 
                 if (cts.IsCancellationRequested)
                     break;
@@ -449,7 +449,7 @@ namespace Staudt.Engineering.LidaRx.Drivers.R2000.Connectors
 
         public async Task StopAsync()
         {
-            await sem.WaitAsync();
+            await sem.WaitAsync().ConfigureAwait(false);
 
             if(!running)
             {
@@ -458,8 +458,8 @@ namespace Staudt.Engineering.LidaRx.Drivers.R2000.Connectors
             }
 
             // stop the scan output and release the handle
-            var stopOutResult = await httpClient.GetAsAsync<R2000ProtocolBaseResponse>($"stop_scanoutput?handle={currentHandle.HandleName}");
-            var releaseHandleResult = await httpClient.GetAsAsync<R2000ProtocolBaseResponse>($"release_handle?handle={currentHandle.HandleName}");
+            var stopOutResult = await httpClient.GetAsAsync<R2000ProtocolBaseResponse>($"stop_scanoutput?handle={currentHandle.HandleName}").ConfigureAwait(false);
+            var releaseHandleResult = await httpClient.GetAsAsync<R2000ProtocolBaseResponse>($"release_handle?handle={currentHandle.HandleName}").ConfigureAwait(false);
 
             // stop processing
             if (cts != null && !cts.IsCancellationRequested)

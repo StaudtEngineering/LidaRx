@@ -106,7 +106,7 @@ namespace Staudt.Engineering.LidaRx.Drivers.Sweep
 
         public async override Task ConnectAsync()
         {
-            await _semaphoreSlimConnect.WaitAsync();
+            await _semaphoreSlimConnect.WaitAsync().ConfigureAwait(false);
 
             // already connected
             if (Connected)
@@ -116,13 +116,13 @@ namespace Staudt.Engineering.LidaRx.Drivers.Sweep
 
             // make sure we're in a halfway known state...
             var dxCommand = new StopDataAcquisitionCommand();
-            await serialPort.WriteAsync(dxCommand.Command.Select(x => (byte)x).ToArray(), 0, dxCommand.Command.Length);
+            await serialPort.WriteAsync(dxCommand.Command.Select(x => (byte)x).ToArray(), 0, dxCommand.Command.Length).ConfigureAwait(false);
 
-            await Task.Delay(100);
+            await Task.Delay(100).ConfigureAwait(false);
             serialPort.DiscardInBuffer();
 
-            await WaitForStabilizedMotorSpeedAsync(TimeSpan.FromSeconds(10), throwOnFail: true);
-            await UpdateDeviceInfoAsync();
+            await WaitForStabilizedMotorSpeedAsync(TimeSpan.FromSeconds(10), throwOnFail: true).ConfigureAwait(false);
+            await UpdateDeviceInfoAsync().ConfigureAwait(false);
 
             _semaphoreSlimConnect.Release();
         }     
@@ -134,13 +134,13 @@ namespace Staudt.Engineering.LidaRx.Drivers.Sweep
 
         public async override Task DisconnectAsync()
         {
-            await _semaphoreSlimConnect.WaitAsync();
+            await _semaphoreSlimConnect.WaitAsync().ConfigureAwait(false);
 
             if (Connected)
             {
                 // make sure we're in a halfway known state...
                 var dxCommand = new StopDataAcquisitionCommand();
-                await SimpleCommandTxRxAsync(dxCommand);
+                await SimpleCommandTxRxAsync(dxCommand).ConfigureAwait(false);
 
                 // close the serial port
                 serialPort.Close();
@@ -159,13 +159,13 @@ namespace Staudt.Engineering.LidaRx.Drivers.Sweep
             if (!Connected)
                 throw new LidaRxStateException("This instance is not yet connected to the Sweep scanner.");
 
-            await _semaphoreSlimScanStart.WaitAsync();
+            await _semaphoreSlimScanStart.WaitAsync().ConfigureAwait(false);
 
             if (IsScanning)
                 return;
 
             var startScanCommand = new StartDataAcquisitionCommand();
-            await SimpleCommandTxRxAsync(startScanCommand);
+            await SimpleCommandTxRxAsync(startScanCommand).ConfigureAwait(false);
 
             if (startScanCommand.Success == true)
             {
@@ -196,12 +196,12 @@ namespace Staudt.Engineering.LidaRx.Drivers.Sweep
             if (!Connected)
                 throw new LidaRxStateException("This instance is not yet connected to the Sweep scanner.");
 
-            await _semaphoreSlimScanStart.WaitAsync();
+            await _semaphoreSlimScanStart.WaitAsync().ConfigureAwait(false);
 
             // send a stop command to sweep
             var cmd = new StopDataAcquisitionCommand();
             var cmdBytes = cmd.Command.Select(x => (byte)x).ToArray();
-            await serialPort.WriteAsync(cmdBytes, 0, cmdBytes.Length);
+            await serialPort.WriteAsync(cmdBytes, 0, cmdBytes.Length).ConfigureAwait(false);
 
             // stop the threads
             scanProcessingCts.Cancel();
@@ -209,20 +209,20 @@ namespace Staudt.Engineering.LidaRx.Drivers.Sweep
             // wait for termination
             while (this.scanProcessingThreads.Any(x => x.IsAlive))
             {
-                await Task.Delay(1);
+                await Task.Delay(1).ConfigureAwait(false);
             }
 
             this.scanProcessingThreads.Clear();
             this.rxScanBuffer.Clear();
 
-            await Task.Delay(1);
+            await Task.Delay(1).ConfigureAwait(false);
             serialPort.DiscardInBuffer();
 
             // send a second DX command
-            await serialPort.WriteAsync(cmdBytes, 0, cmdBytes.Length);
+            await serialPort.WriteAsync(cmdBytes, 0, cmdBytes.Length).ConfigureAwait(false);
 
             // throwaway stuff in the RX buffer!
-            Thread.Sleep(1);
+            await Task.Delay(1).ConfigureAwait(false);
             serialPort.DiscardInBuffer();
 
             this._isScanning = false;
@@ -260,22 +260,22 @@ namespace Staudt.Engineering.LidaRx.Drivers.Sweep
             if(_isScanning && !smartInterleave)
                 throw new InvalidOperationException("Cannot change device configuration while scan is running");
 
-            await _semaphoreConfigurationChanges.WaitAsync();
+            await _semaphoreConfigurationChanges.WaitAsync().ConfigureAwait(false);
 
             if (_isScanning)
             {
-                await StopScanAsync();
+                await StopScanAsync().ConfigureAwait(false);
 
                 // give sweep some time to recover
-                await Task.Delay(250);
+                await Task.Delay(250).ConfigureAwait(false);
             }
 
             var cmd = new AdjustMotorSpeedCommand(targetSpeed);
-            await SimpleCommandTxRxAsync(cmd);
+            await SimpleCommandTxRxAsync(cmd).ConfigureAwait(false);
 
             if (cmd.Status == AdjustMotorSpeedResult.Success)
             {
-                await WaitForStabilizedMotorSpeedAsync(TimeSpan.FromSeconds(30));
+                await WaitForStabilizedMotorSpeedAsync(TimeSpan.FromSeconds(30)).ConfigureAwait(false);
                 this.Info.MotorSpeed = targetSpeed;
             }
             else
@@ -285,7 +285,7 @@ namespace Staudt.Engineering.LidaRx.Drivers.Sweep
 
             if (restartScanning)
             {
-                await StartScanAsync();
+                await StartScanAsync().ConfigureAwait(false);
             }
 
             _semaphoreConfigurationChanges.Release();
@@ -316,18 +316,18 @@ namespace Staudt.Engineering.LidaRx.Drivers.Sweep
             if (_isScanning && !smartInterleave)
                 throw new InvalidOperationException("Cannot change device configuration while scan is running");
 
-            await _semaphoreConfigurationChanges.WaitAsync();
+            await _semaphoreConfigurationChanges.WaitAsync().ConfigureAwait(false);
 
             if (_isScanning)
             {
-                await StopScanAsync();
+                await StopScanAsync().ConfigureAwait(false);
 
                 // give sweep some time to recover
-                await Task.Delay(250);
+                await Task.Delay(250).ConfigureAwait(false);
             }
 
             var cmd = new AdjustSampleRateCommand(targetRate);
-            await SimpleCommandTxRxAsync(cmd);
+            await SimpleCommandTxRxAsync(cmd).ConfigureAwait(false);
 
             if (cmd.Status == AdjustSampleRateResult.Success)
             {
@@ -340,7 +340,7 @@ namespace Staudt.Engineering.LidaRx.Drivers.Sweep
 
             if (restartScanning)
             {
-                await StartScanAsync();
+                await StartScanAsync().ConfigureAwait(false);
             }
 
             _semaphoreConfigurationChanges.Release();
@@ -359,8 +359,8 @@ namespace Staudt.Engineering.LidaRx.Drivers.Sweep
             var idCommand = new DeviceInformationCommand();
             var ivCommand = new VersionInformationCommand();
 
-            await SimpleCommandTxRxAsync(idCommand);
-            await SimpleCommandTxRxAsync(ivCommand);
+            await SimpleCommandTxRxAsync(idCommand).ConfigureAwait(false);
+            await SimpleCommandTxRxAsync(ivCommand).ConfigureAwait(false);
 
             FillDeviceInfo(idCommand, ivCommand);
         }
@@ -402,14 +402,14 @@ namespace Staudt.Engineering.LidaRx.Drivers.Sweep
             {
                 try
                 {
-                    await SimpleCommandTxRxAsync(mrCommand);
+                    await SimpleCommandTxRxAsync(mrCommand).ConfigureAwait(false);
 
                     if (mrCommand.DeviceReady == true)
                         break;
                 }
                 catch { }
 
-                await Task.Delay(50);
+                await Task.Delay(50).ConfigureAwait(false);
             }
 
             if (throwOnFail && mrCommand.DeviceReady == false)
@@ -599,8 +599,8 @@ namespace Staudt.Engineering.LidaRx.Drivers.Sweep
             serialPort.DiscardInBuffer();
 
             // TX then RX
-            await serialPort.WriteAsync(cmd.Command.Select(x => (byte)x).ToArray(), 0, cmd.Command.Length);
-            var bytesRead = await serialPort.ReadAsync(buffer, 0, cmd.ExpectedAnswerLength);
+            await serialPort.WriteAsync(cmd.Command.Select(x => (byte)x).ToArray(), 0, cmd.Command.Length).ConfigureAwait(false);
+            var bytesRead = await serialPort.ReadAsync(buffer, 0, cmd.ExpectedAnswerLength).ConfigureAwait(false);
 
             if(bytesRead == cmd.ExpectedAnswerLength)
             {

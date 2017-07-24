@@ -30,10 +30,10 @@ namespace Staudt.Engineering.LidaRx.Drivers.R2000.Helpers
 
         public static async Task<T> GetAsAsync<T>(this HttpClient client, string path)
         {
-            var request = await client.GetAsync(path);
+            var request = await client.GetAsync(path).ConfigureAwait(false);
             request.EnsureSuccessStatusCode();
 
-            var jsonBody = await request.Content.ReadAsStringAsync();
+            var jsonBody = await request.Content.ReadAsStringAsync().ConfigureAwait(false);
 
             return JsonConvert.DeserializeObject<T>(jsonBody);
         }
